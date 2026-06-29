@@ -24,6 +24,7 @@ export default function App() {
   const [longitude, setLongitude] = useState("");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const latestQueryRef = useRef("");
 
   const [dbStatus, setDbStatus] = useState({ loading: true, count: 0, error: null as string | null });
 
@@ -63,13 +64,15 @@ export default function App() {
     };
   }, []);
 
-  // Triggers the search query on backend
-  const handleSearchSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    
-    if (inputValue.trim() === "") {
+  // Triggers the search query on backend instantly
+  const performSearch = async (query: string) => {
+    latestQueryRef.current = query;
+    const cleanQuery = query.trim();
+
+    if (cleanQuery === "") {
       setSearchResults([]);
       setHasSearched(false);
+      setSelectedRecord(null);
       return;
     }
 
@@ -83,39 +86,46 @@ export default function App() {
       const response = await fetch("/api/search-external", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: inputValue }),
+        body: JSON.stringify({ query: cleanQuery }),
       });
       if (!response.ok) {
         throw new Error("ရှာဖွေမှု အဆင်မပြေပါ။ ပြန်လည်ကြိုးစားကြည့်ပါ။");
       }
       const data = await response.json();
-      const results = data.results || [];
-      setSearchResults(results);
-      if (results.length > 0) {
-        setSelectedRecord(results[0]);
-      } else {
-        setSelectedRecord(null);
+      
+      // Prevent stale async state updates
+      if (latestQueryRef.current === query) {
+        const results = data.results || [];
+        setSearchResults(results);
+        if (results.length > 0) {
+          setSelectedRecord(results[0]);
+        } else {
+          setSelectedRecord(null);
+        }
       }
     } catch (err: any) {
       console.error(err);
-      setError("အချက်အလက် ချိတ်ဆက်မှု မအောင်မြင်ပါ။");
+      if (latestQueryRef.current === query) {
+        setError("အချက်အလက် ချိတ်ဆက်မှု မအောင်မြင်ပါ။");
+      }
     } finally {
-      setIsSearching(false);
+      if (latestQueryRef.current === query) {
+        setIsSearching(false);
+      }
     }
   };
 
-  // Filter keys for input values (Accepts numbers only)
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    performSearch(inputValue);
+  };
+
+  // Filter keys for input values (Accepts numbers only and searches instantly!)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Keep only numeric digits
     const numericVal = val.replace(/[^0-9]/g, "");
     setInputValue(numericVal);
-    if (numericVal === "") {
-      setSelectedRecord(null);
-      setSearchResults([]);
-      setHasSearched(false);
-    }
-    setUploadSuccess(false);
+    performSearch(numericVal);
   };
 
   // GPS Coordinates helper

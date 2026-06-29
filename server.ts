@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -9,11 +10,29 @@ const PORT = 3000;
 
 app.use(express.json());
 
+const CACHE_FILE = path.join(process.cwd(), "cached_records.json");
+
 // Fast-Memory Cache to respond in milliseconds!
 let cachedData: any[] = [];
 let isWarmingUp = true;
 let lastFetchedTime = 0;
 let cacheError: string | null = null;
+
+// Instantly load from local file cache if it exists for sub-millisecond warm up
+try {
+  if (fs.existsSync(CACHE_FILE)) {
+    const cachedText = fs.readFileSync(CACHE_FILE, "utf8");
+    const parsedCache = JSON.parse(cachedText);
+    if (Array.isArray(parsedCache) && parsedCache.length > 0) {
+      cachedData = parsedCache;
+      isWarmingUp = false;
+      lastFetchedTime = fs.statSync(CACHE_FILE).mtimeMs;
+      console.log(`Loaded ${cachedData.length} records instantly on startup from filesystem cache.`);
+    }
+  }
+} catch (err) {
+  console.error("Failed to load local filesystem cache on startup:", err);
+}
 
 // Robust numeric default fallback records to test "Number Only" search immediately if sheets fetch is pending
 const defaultFallbackRecords = [
@@ -132,6 +151,14 @@ async function initializeCache() {
       lastFetchedTime = Date.now();
       cacheError = null;
       console.log(`Database loaded successfully! Caching ${cachedData.length} records.`);
+      
+      // Persist to local filesystem cache for instant future starts
+      try {
+        fs.writeFileSync(CACHE_FILE, JSON.stringify(validParsed), "utf8");
+        console.log("Saved successfully loaded Google Sheets data to local filesystem cache.");
+      } catch (err) {
+        console.error("Failed to save loaded database to local filesystem cache:", err);
+      }
     } else if (cachedData.length === 0) {
       cachedData = defaultFallbackRecords;
     }
