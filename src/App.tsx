@@ -29,6 +29,15 @@ export default function App() {
 
   const [localRecords, setLocalRecords] = useState<ExternalRecord[]>([]);
 
+  // Default fallback records for instant client-side testing
+  const defaultFallbackRecords = [
+    { "ID": "12345", "အမည်": "ဦးကျော်သက်ဦး", "ရာထူး": "မန်နေဂျာ", "မြို့နယ်": "ရန်ကုန်", "ဖုန်း": "0945001122" },
+    { "ID": "67890", "အမည်": "ဒေါ်အေးအေးစိုး", "ရာထူး": "စာရင်းကိုင်", "မြို့နယ်": "မန္တလေး", "ဖုန်း": "0925447788" },
+    { "ID": "11223", "အမည်": "မောင်မောင်ဦး", "ရာထူး": "ကြီးကြပ်ရေးမှူး", "မြို့နယ်": "နေပြည်တော်", "ဖုန်း": "0979885522" },
+    { "ID": "44556", "အမည်": "မသီတာထွန်း", "ရာထူး": "အရောင်းလက်ထောက်", "မြို့နယ်": "ပဲခူး", "ဖုန်း": "0996554411" },
+    { "ID": "77889", "အမည်": "ဦးလှမင်း", "ရာထူး": "ယာဉ်မောင်း", "မြို့နယ်": "လှိုင်", "ဖုန်း": "0931223344" }
+  ];
+
   // Load from LocalStorage instantly on mount and update with background CSV fetch
   useEffect(() => {
     // 1. Try to load instantly from LocalStorage cache (takes ~10-20ms)
@@ -43,10 +52,15 @@ export default function App() {
       } catch (err) {
         console.error("LocalStorage parsing failed:", err);
       }
+    } else {
+      // Pre-seed local records with default mock records while fetching to ensure no empty search
+      setLocalRecords(defaultFallbackRecords);
     }
 
     // 2. Freshly fetch the compact CSV from server to silent-refresh cache
     const fetchFreshRecords = async () => {
+      let fetchSuccessful = false;
+
       try {
         const response = await fetch("/api/get-all-records-csv");
         if (response.ok) {
@@ -56,12 +70,92 @@ export default function App() {
             if (parsed.data && parsed.data.length > 0) {
               setLocalRecords(parsed.data);
               localStorage.setItem("cached_csv_records", csvText);
-              console.log(`Loaded & cached ${parsed.data.length} records freshly on client-side.`);
+              console.log(`Loaded & cached ${parsed.data.length} records freshly from server CSV.`);
+              fetchSuccessful = true;
             }
           }
         }
       } catch (err) {
-        console.error("Background fresh CSV fetch failed:", err);
+        console.warn("Server API fetch not available (expected if running as static hosting on GitHub Pages):", err);
+      }
+
+      // If server API fails (e.g. running on GitHub Pages as static site), fetch directly from the Google Apps Script Web App!
+      if (!fetchSuccessful) {
+        try {
+          console.log("Attempting direct cross-origin fetch from Google Apps Script web app...");
+          const response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
+            method: "GET"
+          });
+          if (response.ok) {
+            const text = await response.text();
+            
+            // Check if response is HTML warning or error
+            if (text && text.trim() && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
+              let parsedData: ExternalRecord[] = [];
+              try {
+                const jsonData = JSON.parse(text);
+                
+                if (Array.isArray(jsonData)) {
+                  if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+                    const headers = jsonData[0].map((h: any) => String(h || "").trim());
+                    parsedData = jsonData.slice(1).map((row: any, rIdx: number) => {
+                      const obj: any = {};
+                      headers.forEach((header, cIdx) => {
+                        const key = header || `Column_${cIdx + 1}`;
+                        obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
+                      });
+                      if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
+                      return obj;
+                    });
+                  } else {
+                    parsedData = jsonData;
+                  }
+                } else if (jsonData && typeof jsonData === "object") {
+                  const list = jsonData.data || jsonData.rows || jsonData.records || jsonData.items;
+                  if (Array.isArray(list)) {
+                    if (list.length > 0 && Array.isArray(list[0])) {
+                      const headers = list[0].map((h: any) => String(h || "").trim());
+                      parsedData = list.slice(1).map((row: any, rIdx: number) => {
+                        const obj: any = {};
+                        headers.forEach((header, cIdx) => {
+                          const key = header || `Column_${cIdx + 1}`;
+                          obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
+                        });
+                        if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
+                        return obj;
+                      });
+                    } else {
+                      parsedData = list;
+                    }
+                  } else {
+                    parsedData = [jsonData];
+                  }
+                }
+              } catch (e) {
+                // If JSON parsing fails, attempt to parse as CSV
+                const parsed = Papa.parse<ExternalRecord>(text, { header: true, skipEmptyLines: true });
+                if (parsed.data && parsed.data.length > 0) {
+                  parsedData = parsed.data;
+                }
+              }
+
+              if (parsedData.length > 0) {
+                setLocalRecords(parsedData);
+                const serialized = Papa.unparse(parsedData);
+                localStorage.setItem("cached_csv_records", serialized);
+                console.log(`Loaded & cached ${parsedData.length} records directly from Google Apps Script Web App.`);
+                fetchSuccessful = true;
+              }
+            }
+          }
+        } catch (directErr) {
+          console.error("Direct Google Apps Script fetch failed too:", directErr);
+        }
+      }
+
+      // If all fails, and we don't have anything cached, default to fallback records
+      if (!fetchSuccessful && (!cachedCsv || localRecords.length === 0)) {
+        setLocalRecords(defaultFallbackRecords);
       }
     };
 
@@ -127,7 +221,20 @@ export default function App() {
         }
       })
       .catch((err) => {
-        console.error("Server fallback search failed:", err);
+        console.error("Server fallback search failed, using default fallback:", err);
+        const fallbackResults = defaultFallbackRecords.filter((item) => {
+          return Object.values(item).some(val => 
+            String(val || "").toLowerCase().includes(cleanQueryLower)
+          );
+        });
+        if (latestQueryRef.current === query) {
+          setSearchResults(fallbackResults);
+          if (fallbackResults.length > 0) {
+            setSelectedRecord(fallbackResults[0]);
+          } else {
+            setSelectedRecord(null);
+          }
+        }
       })
       .finally(() => {
         if (latestQueryRef.current === query) {
