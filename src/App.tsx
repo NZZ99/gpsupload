@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { 
   Search, MapPin, ArrowUp, Check, RefreshCw, AlertCircle, Navigation, X, ShieldCheck, Delete
 } from "lucide-react";
+import Papa from "papaparse";
 
 interface ExternalRecord {
   [key: string]: any;
@@ -26,46 +27,49 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const latestQueryRef = useRef("");
 
-  const [dbStatus, setDbStatus] = useState({ loading: true, count: 0, error: null as string | null });
+  const [localRecords, setLocalRecords] = useState<ExternalRecord[]>([]);
 
-  // Pre-load and check status of massive Google Sheet database (5.2MB) on mount
+  // Load from LocalStorage instantly on mount and update with background CSV fetch
   useEffect(() => {
-    let intervalId: any;
-
-    const checkStatus = async () => {
+    // 1. Try to load instantly from LocalStorage cache (takes ~10-20ms)
+    const cachedCsv = localStorage.getItem("cached_csv_records");
+    if (cachedCsv) {
       try {
-        const response = await fetch("/api/status");
-        if (response.ok) {
-          const status = await response.json();
-          setDbStatus({
-            loading: status.loading,
-            count: status.count,
-            error: status.error
-          });
+        const parsed = Papa.parse<ExternalRecord>(cachedCsv, { header: true, skipEmptyLines: true });
+        if (parsed.data && parsed.data.length > 0) {
+          setLocalRecords(parsed.data);
+          console.log(`Loaded ${parsed.data.length} records instantly from LocalStorage cache.`);
+        }
+      } catch (err) {
+        console.error("LocalStorage parsing failed:", err);
+      }
+    }
 
-          // If finished loading, clear polling interval
-          if (!status.loading && intervalId) {
-            clearInterval(intervalId);
+    // 2. Freshly fetch the compact CSV from server to silent-refresh cache
+    const fetchFreshRecords = async () => {
+      try {
+        const response = await fetch("/api/get-all-records-csv");
+        if (response.ok) {
+          const csvText = await response.text();
+          if (csvText && csvText.trim()) {
+            const parsed = Papa.parse<ExternalRecord>(csvText, { header: true, skipEmptyLines: true });
+            if (parsed.data && parsed.data.length > 0) {
+              setLocalRecords(parsed.data);
+              localStorage.setItem("cached_csv_records", csvText);
+              console.log(`Loaded & cached ${parsed.data.length} records freshly on client-side.`);
+            }
           }
         }
       } catch (err) {
-        console.error("Failed to fetch database status:", err);
+        console.error("Background fresh CSV fetch failed:", err);
       }
     };
 
-    // Initial check
-    checkStatus();
-
-    // Poll every 3 seconds to update progress
-    intervalId = setInterval(checkStatus, 3000);
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    fetchFreshRecords();
   }, []);
 
-  // Triggers the search query on backend instantly
-  const performSearch = async (query: string) => {
+  // Triggers the search query instantly in-memory
+  const performSearch = (query: string) => {
     latestQueryRef.current = query;
     const cleanQuery = query.trim();
 
@@ -82,36 +86,54 @@ export default function App() {
     setSelectedRecord(null);
     setUploadSuccess(false);
 
-    try {
-      const response = await fetch("/api/search-external", {
+    const cleanQueryLower = cleanQuery.toLowerCase();
+
+    // 1. If we have client-side cached records in memory, search them instantly! (< 1ms!)
+    if (localRecords.length > 0) {
+      const results = localRecords.filter((item) => {
+        if (!item) return false;
+        return Object.values(item).some(val => 
+          String(val || "").toLowerCase().includes(cleanQueryLower)
+        );
+      });
+
+      setSearchResults(results);
+      if (results.length > 0) {
+        setSelectedRecord(results[0]);
+      } else {
+        setSelectedRecord(null);
+      }
+      setIsSearching(false);
+    } else {
+      // 2. Fallback to server search only if cache is empty (first ever load)
+      fetch("/api/search-external", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: cleanQuery }),
-      });
-      if (!response.ok) {
-        throw new Error("ရှာဖွေမှု အဆင်မပြေပါ။ ပြန်လည်ကြိုးစားကြည့်ပါ။");
-      }
-      const data = await response.json();
-      
-      // Prevent stale async state updates
-      if (latestQueryRef.current === query) {
-        const results = data.results || [];
-        setSearchResults(results);
-        if (results.length > 0) {
-          setSelectedRecord(results[0]);
-        } else {
-          setSelectedRecord(null);
+      })
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then((data) => {
+        if (latestQueryRef.current === query) {
+          const results = data.results || [];
+          setSearchResults(results);
+          if (results.length > 0) {
+            setSelectedRecord(results[0]);
+          } else {
+            setSelectedRecord(null);
+          }
         }
-      }
-    } catch (err: any) {
-      console.error(err);
-      if (latestQueryRef.current === query) {
-        setError("အချက်အလက် ချိတ်ဆက်မှု မအောင်မြင်ပါ။");
-      }
-    } finally {
-      if (latestQueryRef.current === query) {
-        setIsSearching(false);
-      }
+      })
+      .catch((err) => {
+        console.error("Server fallback search failed:", err);
+      })
+      .finally(() => {
+        if (latestQueryRef.current === query) {
+          setIsSearching(false);
+        }
+      });
     }
   };
 
@@ -120,12 +142,16 @@ export default function App() {
     performSearch(inputValue);
   };
 
-  // Filter keys for input values (Accepts numbers only and searches instantly!)
+  // Filter keys for input values (Accepts numbers only - search triggered manually by Enter or Search icon)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     const numericVal = val.replace(/[^0-9]/g, "");
     setInputValue(numericVal);
-    performSearch(numericVal);
+    if (numericVal === "") {
+      setSelectedRecord(null);
+      setSearchResults([]);
+      setHasSearched(false);
+    }
   };
 
   // GPS Coordinates helper

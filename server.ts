@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import fs from "fs";
+import Papa from "papaparse";
 
 dotenv.config();
 
@@ -187,6 +188,18 @@ app.get("/api/status", (req, res) => {
     lastFetched: lastFetchedTime,
     error: cacheError
   });
+});
+
+// GET CSV endpoint for high-performance compact data transmission and client-side memory caching
+app.get("/api/get-all-records-csv", (req, res) => {
+  try {
+    const csv = Papa.unparse(cachedData);
+    res.setHeader("Content-Type", "text/csv");
+    res.send(csv);
+  } catch (error) {
+    console.error("Failed to generate CSV data:", error);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 // 1. Instant Internal/External Data Search Endpoint (Guarantees < 10ms local response!)
