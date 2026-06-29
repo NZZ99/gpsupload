@@ -441,7 +441,7 @@ export default function App() {
                   </button>
                 </motion.div>
               ) : (
-                <>
+                <div className="w-full flex flex-col gap-1.5">
                   {/* Elegant Morphic Search Bar with Circular Search Button on Right */}
                   <form 
                     onSubmit={handleSearchSubmit}
@@ -487,162 +487,168 @@ export default function App() {
                   </form>
 
                   {/* Clean Minimalist Database Status Indicator (Below Search Bar, No Box) */}
-                  <div className="w-full flex flex-col items-center justify-center py-2">
-                    {isDbLoading ? (
-                      <div className="flex items-center gap-2 text-zinc-500 font-sans text-xs">
-                        <span>Database ရယူနေသည်</span>
-                        <span className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-1">
-                        <div className="w-5 h-5 rounded-full bg-black flex items-center justify-center shadow-xs">
-                          <Check className="w-3 h-3 text-white" strokeWidth={3.5} />
+                  {/* Only visible when not searching / typing */}
+                  {(!inputValue.trim() && !hasSearched) && (
+                    <div className="w-full flex flex-col items-center justify-center py-2">
+                      {isDbLoading ? (
+                        <div className="flex items-center gap-2 text-zinc-500 font-sans text-xs">
+                          <span>Database ရယူနေသည်</span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                            <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                          </span>
                         </div>
-                        <span className="text-xs font-bold text-zinc-800 font-sans">
-                          ရှာဖွေနိုင်ပါပြီ
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Search Loading or Empty Results Feedback (No small box shown) */}
-                  {hasSearched && (
-                    <div>
-                      {isSearching ? (
-                        <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 text-center flex flex-col items-center justify-center shadow-xs">
-                          <RefreshCw className="w-5 h-5 animate-spin text-zinc-400" />
-                          <p className="text-xs text-zinc-400 font-sans mt-2">ရှာဖွေနေပါသည်...</p>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <div className="w-5 h-5 rounded-full bg-black flex items-center justify-center shadow-xs">
+                            <Check className="w-3 h-3 text-white" strokeWidth={3.5} />
+                          </div>
+                          <span className="text-xs font-bold text-zinc-800 font-sans">
+                            ရှာဖွေနိုင်ပါပြီ
+                          </span>
                         </div>
-                      ) : searchResults.length === 0 ? (
-                        <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 text-center text-zinc-400 text-sm font-sans shadow-xs">
-                          ရှာဖွေမှုနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ။
-                        </div>
-                      ) : null}
+                      )}
                     </div>
                   )}
 
-                  {/* Data Record Details and Location inputs (Only shown when a record is selected) */}
-                  <AnimatePresence mode="wait">
-                    {selectedRecord && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="flex flex-col gap-5 w-full"
-                      >
-                        
-                        {/* Selected Item Properties Display Card (Keys are now bold black!) */}
-                        <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xs p-5">
-                          <div className="space-y-2.5">
-                            {Object.entries(selectedRecord)
-                              .filter(([key]) => {
-                                const kLower = key.toLowerCase();
-                                return kLower !== "id" && kLower !== "column_1";
-                              })
-                              .map(([key, value]) => (
-                                <div key={key} className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 last:border-0 text-xs sm:text-sm">
-                                  <span className="font-sans font-bold text-black uppercase tracking-wide">{key}</span>
-                                  <span className="col-span-2 text-zinc-800 font-medium break-all">{String(value)}</span>
-                                  </div>
-                              ))}
+                  {/* Wrapper for search results/box so that the spacing is extremely close (0.5 spacing or 1 spacing) to the search bar */}
+                  <div className="w-full flex flex-col gap-4 mt-0.5">
+                    {/* Search Loading or Empty Results Feedback (No small box shown) */}
+                    {hasSearched && (
+                      <div>
+                        {isSearching ? (
+                          <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 text-center flex flex-col items-center justify-center shadow-xs">
+                            <RefreshCw className="w-5 h-5 animate-spin text-zinc-400" />
+                            <p className="text-xs text-zinc-400 font-sans mt-2">ရှာဖွေနေပါသည်...</p>
                           </div>
-                        </div>
-
-                        {/* Coordinates Selection Box */}
-                        <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xs p-5 space-y-4">
-                          <div className="flex items-center gap-1 border-b border-zinc-100 pb-2">
-                            <MapPin className="w-4 h-4 text-black" />
-                            <span className="text-xs font-display font-bold uppercase tracking-wider text-black">
-                              LOCATION COORDINATES
-                            </span>
+                        ) : searchResults.length === 0 ? (
+                          <div className="bg-white border border-zinc-200/80 rounded-2xl p-6 text-center text-zinc-400 text-sm font-sans shadow-xs">
+                            ရှာဖွေမှုနှင့် ကိုက်ညီသော အချက်အလက် မတွေ့ပါ။
                           </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label htmlFor="latitude" className="block text-[10px] font-bold text-black mb-1">
-                                Latitude (လတ္တီတွဒ်)
-                              </label>
-                              <input
-                                type="text"
-                                id="latitude"
-                                placeholder="ဥပမာ: 16.8409"
-                                value={latitude}
-                                onChange={(e) => {
-                                  setLatitude(e.target.value);
-                                  setUploadSuccess(false);
-                                }}
-                                className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label htmlFor="longitude" className="block text-[10px] font-bold text-black mb-1">
-                                Longitude (လောင်ဂျီတွဒ်)
-                              </label>
-                              <input
-                                type="text"
-                                id="longitude"
-                                placeholder="ဥပမာ: 96.1735"
-                                value={longitude}
-                                onChange={(e) => {
-                                  setLongitude(e.target.value);
-                                  setUploadSuccess(false);
-                                }}
-                                className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Elongated Black Pill Dispatch Button */}
-                        <div className="w-full flex flex-col items-center gap-3 pt-3">
-                          <button
-                            type="button"
-                            onClick={handleUpload}
-                            disabled={isUploading}
-                            className="relative flex items-center justify-between w-full max-w-sm h-14 bg-[#18191d] text-white rounded-full pl-6 pr-2.5 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
-                          >
-                            {/* Status/Progress Label */}
-                            <span className="font-sans font-bold tracking-wide text-sm text-zinc-100 transition-all">
-                              {isUploading ? (
-                                <span className="flex items-center gap-2">
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                  Uploading...
-                                </span>
-                              ) : (
-                                "Upload"
-                              )}
-                            </span>
-
-                            {/* Internal circular icon badge */}
-                            <div className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 group-hover:bg-zinc-700">
-                              <ArrowUp className="w-4 h-4 text-white" strokeWidth={2.5} />
-                            </div>
-                          </button>
-
-                          {/* feedback info */}
-                          <AnimatePresence>
-                            {error && (
-                              <motion.div
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="text-red-500 text-xs font-sans flex items-center gap-1.5 max-w-sm text-center"
-                              >
-                                <AlertCircle className="w-4 h-4 shrink-0" />
-                                <span>{error}</span>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                      </motion.div>
+                        ) : null}
+                      </div>
                     )}
-                  </AnimatePresence>
-                </>
+
+                    {/* Data Record Details and Location inputs (Only shown when a record is selected) */}
+                    <AnimatePresence mode="wait">
+                      {selectedRecord && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="flex flex-col gap-5 w-full"
+                        >
+                          
+                          {/* Selected Item Properties Display Card (Keys are now bold black!) */}
+                          <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xs p-5">
+                            <div className="space-y-2.5">
+                              {Object.entries(selectedRecord)
+                                .filter(([key]) => {
+                                  const kLower = key.toLowerCase();
+                                  return kLower !== "id" && kLower !== "column_1";
+                                })
+                                .map(([key, value]) => (
+                                  <div key={key} className="grid grid-cols-3 gap-2 py-1.5 border-b border-zinc-100 last:border-0 text-xs sm:text-sm">
+                                    <span className="font-sans font-bold text-black uppercase tracking-wide">{key}</span>
+                                    <span className="col-span-2 text-zinc-800 font-medium break-all">{String(value)}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+
+                          {/* Coordinates Selection Box */}
+                          <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xs p-5 space-y-4">
+                            <div className="flex items-center gap-1 border-b border-zinc-100 pb-2">
+                              <MapPin className="w-4 h-4 text-black" />
+                              <span className="text-xs font-display font-bold uppercase tracking-wider text-black">
+                                LOCATION COORDINATES
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label htmlFor="latitude" className="block text-[10px] font-bold text-black mb-1">
+                                  Latitude (လတ္တီတွဒ်)
+                                </label>
+                                <input
+                                  type="text"
+                                  id="latitude"
+                                  placeholder="ဥပမာ: 16.8409"
+                                  value={latitude}
+                                  onChange={(e) => {
+                                    setLatitude(e.target.value);
+                                    setUploadSuccess(false);
+                                  }}
+                                  className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
+                                />
+                              </div>
+
+                              <div>
+                                <label htmlFor="longitude" className="block text-[10px] font-bold text-black mb-1">
+                                  Longitude (လောင်ဂျီတွဒ်)
+                                </label>
+                                <input
+                                  type="text"
+                                  id="longitude"
+                                  placeholder="ဥပမာ: 96.1735"
+                                  value={longitude}
+                                  onChange={(e) => {
+                                    setLongitude(e.target.value);
+                                    setUploadSuccess(false);
+                                  }}
+                                  className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Elongated Black Pill Dispatch Button */}
+                          <div className="w-full flex flex-col items-center gap-3 pt-3">
+                            <button
+                              type="button"
+                              onClick={handleUpload}
+                              disabled={isUploading}
+                              className="relative flex items-center justify-between w-full max-w-sm h-14 bg-[#18191d] text-white rounded-full pl-6 pr-2.5 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
+                            >
+                              {/* Status/Progress Label */}
+                              <span className="font-sans font-bold tracking-wide text-sm text-zinc-100 transition-all">
+                                {isUploading ? (
+                                  <span className="flex items-center gap-2">
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    Uploading...
+                                  </span>
+                                ) : (
+                                  "Upload"
+                                )}
+                              </span>
+
+                              {/* Internal circular icon badge */}
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 group-hover:bg-zinc-700">
+                                <ArrowUp className="w-4 h-4 text-white" strokeWidth={2.5} />
+                              </div>
+                            </button>
+
+                            {/* feedback info */}
+                            <AnimatePresence>
+                              {error && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="text-red-500 text-xs font-sans flex items-center gap-1.5 max-w-sm text-center"
+                                >
+                                  <AlertCircle className="w-4 h-4 shrink-0" />
+                                  <span>{error}</span>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
               )}
 
             </motion.div>

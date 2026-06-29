@@ -309,16 +309,76 @@ app.post("/api/upload-external", async (req, res) => {
       address: addressVal,
     };
 
-    const response = await fetch(fullTargetUrl, {
-      method: "POST",
-      redirect: "follow",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody)
-    });
+    let response: Response | null = null;
+    let text = "";
+    let uploadSuccess = false;
 
-    const text = await response.text();
+    // Attempt 1: POST request with manual redirect handling
+    try {
+      console.log("Attempting upload via POST with manual redirect follow...");
+      response = await fetch(fullTargetUrl, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      // Handle Google Apps Script 302/301 redirects manually to avoid Node redirect-stripping bugs
+      if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+        const redirectUrl = response.headers.get("location");
+        if (redirectUrl) {
+          console.log("Manually following redirect to:", redirectUrl);
+          response = await fetch(redirectUrl, {
+            method: "GET"
+          });
+        }
+      }
+
+      if (response.ok) {
+        text = await response.text();
+        uploadSuccess = true;
+        console.log("POST upload succeeded. Response:", text);
+      } else {
+        console.warn(`POST upload returned status ${response.status}. Trying GET fallback...`);
+      }
+    } catch (postErr: any) {
+      console.warn("POST upload failed with error, trying GET fallback:", postErr.message || postErr);
+    }
+
+    // Attempt 2: Fallback to GET request (Google Apps Script often handles GET query parameters as fallback)
+    if (!uploadSuccess) {
+      try {
+        console.log("Attempting fallback upload via GET...");
+        response = await fetch(fullTargetUrl, {
+          method: "GET",
+          redirect: "manual"
+        });
+
+        if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+          const redirectUrl = response.headers.get("location");
+          if (redirectUrl) {
+            console.log("Manually following GET redirect to:", redirectUrl);
+            response = await fetch(redirectUrl, {
+              method: "GET"
+            });
+          }
+        }
+
+        if (response.ok) {
+          text = await response.text();
+          uploadSuccess = true;
+          console.log("GET upload fallback succeeded. Response:", text);
+        } else {
+          throw new Error(`GET fallback returned status ${response.status}`);
+        }
+      } catch (getErr: any) {
+        console.error("GET fallback upload also failed:", getErr.message || getErr);
+        throw new Error("ပေးပို့မှု မအောင်မြင်ပါ။ Google Apps Script Web App သို့ ဆက်သွယ်၍မရပါ။");
+      }
+    }
+
     res.json({ success: true, response: text });
   } catch (error: any) {
     console.error("External location report upload error:", error);
