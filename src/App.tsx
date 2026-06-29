@@ -38,26 +38,52 @@ export default function App() {
     { "ID": "77889", "အမည်": "ဦးလှမင်း", "ရာထူး": "ယာဉ်မောင်း", "မြို့နယ်": "လှိုင်", "ဖုန်း": "0931223344" }
   ];
 
-  // Load from LocalStorage instantly on mount and update with background CSV fetch
+  // Load from LocalStorage or CDN Snapshot instantly on mount and update with background CSV fetch
   useEffect(() => {
+    let loadedFromCache = false;
+
     // 1. Try to load instantly from LocalStorage cache (takes ~10-20ms)
     const cachedCsv = localStorage.getItem("cached_csv_records");
     if (cachedCsv) {
       try {
         const parsed = Papa.parse<ExternalRecord>(cachedCsv, { header: true, skipEmptyLines: true });
-        if (parsed.data && parsed.data.length > 0) {
+        if (parsed.data && parsed.data.length > 5) {
           setLocalRecords(parsed.data);
+          loadedFromCache = true;
           console.log(`Loaded ${parsed.data.length} records instantly from LocalStorage cache.`);
         }
       } catch (err) {
         console.error("LocalStorage parsing failed:", err);
       }
-    } else {
-      // Pre-seed local records with default mock records while fetching to ensure no empty search
-      setLocalRecords(defaultFallbackRecords);
     }
 
-    // 2. Freshly fetch the compact CSV from server to silent-refresh cache
+    // 2. If no LocalStorage cache, fetch the pre-compiled CDN snapshot instantly (<200ms)
+    if (!loadedFromCache) {
+      // Seed fallback records first to be safe
+      setLocalRecords(defaultFallbackRecords);
+
+      fetch("/database_snapshot.json")
+        .then(res => {
+          if (res.ok) return res.json();
+          throw new Error();
+        })
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLocalRecords(data);
+            console.log(`Loaded ${data.length} records instantly from CDN snapshot!`);
+            try {
+              localStorage.setItem("cached_csv_records", Papa.unparse(data));
+            } catch (e) {
+              console.error("Failed to write snapshot to LocalStorage:", e);
+            }
+          }
+        })
+        .catch(err => {
+          console.warn("Could not load database snapshot from CDN:", err);
+        });
+    }
+
+    // 3. Freshly fetch the compact CSV from server to silent-refresh cache in background
     const fetchFreshRecords = async () => {
       let fetchSuccessful = false;
 
@@ -152,11 +178,6 @@ export default function App() {
           console.error("Direct Google Apps Script fetch failed too:", directErr);
         }
       }
-
-      // If all fails, and we don't have anything cached, default to fallback records
-      if (!fetchSuccessful && (!cachedCsv || localRecords.length === 0)) {
-        setLocalRecords(defaultFallbackRecords);
-      }
     };
 
     fetchFreshRecords();
@@ -181,9 +202,10 @@ export default function App() {
     setUploadSuccess(false);
 
     const cleanQueryLower = cleanQuery.toLowerCase();
+    const hasRealData = localRecords.length > 10;
 
-    // 1. If we have client-side cached records in memory, search them instantly! (< 1ms!)
-    if (localRecords.length > 0) {
+    // 1. If we have real client-side cached records loaded in memory, search them instantly! (< 1ms!)
+    if (hasRealData) {
       const results = localRecords.filter((item) => {
         if (!item) return false;
         return Object.values(item).some(val => 
@@ -199,7 +221,7 @@ export default function App() {
       }
       setIsSearching(false);
     } else {
-      // 2. Fallback to server search only if cache is empty (first ever load)
+      // 2. Smart fallback search if snapshot is still loading (first ever load)
       fetch("/api/search-external", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,7 +243,7 @@ export default function App() {
         }
       })
       .catch((err) => {
-        console.error("Server fallback search failed, using default fallback:", err);
+        console.error("Server fallback search failed, using fallback:", err);
         const fallbackResults = defaultFallbackRecords.filter((item) => {
           return Object.values(item).some(val => 
             String(val || "").toLowerCase().includes(cleanQueryLower)
