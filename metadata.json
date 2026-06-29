@@ -1,0 +1,6 @@
+{
+  "name": "Smart Data Search & Upload Portal",
+  "description": "A high-speed interactive data lookup and location-tagged report dispatcher connected to secure spreadsheet storage endpoints.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
