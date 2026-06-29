@@ -28,6 +28,7 @@ export default function App() {
   const latestQueryRef = useRef("");
 
   const [localRecords, setLocalRecords] = useState<ExternalRecord[]>([]);
+  const [isDbLoading, setIsDbLoading] = useState(true);
 
   // Default fallback records for instant client-side testing
   const defaultFallbackRecords = [
@@ -50,6 +51,7 @@ export default function App() {
         if (parsed.data && parsed.data.length > 5) {
           setLocalRecords(parsed.data);
           loadedFromCache = true;
+          setIsDbLoading(false);
           console.log(`Loaded ${parsed.data.length} records instantly from LocalStorage cache.`);
         }
       } catch (err) {
@@ -70,6 +72,7 @@ export default function App() {
         .then(data => {
           if (Array.isArray(data) && data.length > 0) {
             setLocalRecords(data);
+            setIsDbLoading(false);
             console.log(`Loaded ${data.length} records instantly from CDN snapshot!`);
             try {
               localStorage.setItem("cached_csv_records", Papa.unparse(data));
@@ -95,6 +98,7 @@ export default function App() {
             const parsed = Papa.parse<ExternalRecord>(csvText, { header: true, skipEmptyLines: true });
             if (parsed.data && parsed.data.length > 0) {
               setLocalRecords(parsed.data);
+              setIsDbLoading(false);
               localStorage.setItem("cached_csv_records", csvText);
               console.log(`Loaded & cached ${parsed.data.length} records freshly from server CSV.`);
               fetchSuccessful = true;
@@ -167,6 +171,7 @@ export default function App() {
 
               if (parsedData.length > 0) {
                 setLocalRecords(parsedData);
+                setIsDbLoading(false);
                 const serialized = Papa.unparse(parsedData);
                 localStorage.setItem("cached_csv_records", serialized);
                 console.log(`Loaded & cached ${parsedData.length} records directly from Google Apps Script Web App.`);
@@ -177,6 +182,11 @@ export default function App() {
         } catch (directErr) {
           console.error("Direct Google Apps Script fetch failed too:", directErr);
         }
+      }
+
+      // If all fails, make sure we stop loading so they can use defaultFallbackRecords!
+      if (!fetchSuccessful) {
+        setIsDbLoading(false);
       }
     };
 
@@ -435,7 +445,7 @@ export default function App() {
                   {/* Elegant Morphic Search Bar with Circular Search Button on Right */}
                   <form 
                     onSubmit={handleSearchSubmit}
-                    className="w-full bg-white border border-zinc-200/80 rounded-full shadow-md p-1.5 pl-5 pr-1.5 flex items-center gap-2"
+                    className={`w-full bg-white border border-zinc-200/80 rounded-full shadow-md p-1.5 pl-5 pr-1.5 flex items-center gap-2 transition-all ${isDbLoading ? "opacity-60 cursor-not-allowed bg-zinc-50" : ""}`}
                   >
                     <input
                       ref={searchInputRef}
@@ -443,13 +453,14 @@ export default function App() {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       id="instant-search-input"
-                      placeholder="ကွန်ကုဒ်တစ်မျိုးထဲသာ ရိုက်ပါ"
+                      placeholder={isDbLoading ? "ခေတ္တစောင့်ဆိုင်းပါ..." : "ကွန်ကုဒ်တစ်မျိုးထဲသာ ရိုက်ပါ"}
                       value={inputValue}
                       onChange={handleInputChange}
-                      className="flex-1 bg-transparent text-zinc-800 placeholder-zinc-400 font-sans outline-none text-base"
+                      disabled={isDbLoading}
+                      className="flex-1 bg-transparent text-zinc-800 placeholder-zinc-400 font-sans outline-none text-base disabled:text-zinc-400 disabled:cursor-not-allowed"
                     />
                     
-                    {inputValue && (
+                    {inputValue && !isDbLoading && (
                       <button
                         type="button"
                         onClick={() => {
@@ -467,12 +478,36 @@ export default function App() {
 
                     <button
                       type="submit"
-                      className="w-11 h-11 bg-black text-white rounded-full flex items-center justify-center cursor-pointer transition-all hover:bg-zinc-800 shrink-0 shadow-md"
+                      disabled={isDbLoading}
+                      className="w-11 h-11 bg-black text-white rounded-full flex items-center justify-center cursor-pointer transition-all hover:bg-zinc-800 shrink-0 shadow-md disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed"
                       title="Search"
                     >
                       <Search className="w-5 h-5 text-white" strokeWidth={2.5} />
                     </button>
                   </form>
+
+                  {/* Clean Minimalist Database Status Indicator (Below Search Bar, No Box) */}
+                  <div className="w-full flex flex-col items-center justify-center py-2">
+                    {isDbLoading ? (
+                      <div className="flex items-center gap-2 text-zinc-500 font-sans text-xs">
+                        <span>Database ရယူနေသည်</span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                          <span className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <div className="w-5 h-5 rounded-full bg-black flex items-center justify-center shadow-xs">
+                          <Check className="w-3 h-3 text-white" strokeWidth={3.5} />
+                        </div>
+                        <span className="text-xs font-bold text-zinc-800 font-sans">
+                          ရှာဖွေနိုင်ပါပြီ
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Search Loading or Empty Results Feedback (No small box shown) */}
                   {hasSearched && (

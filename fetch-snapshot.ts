@@ -6,10 +6,45 @@ const OUT_FILE = path.join(process.cwd(), "public", "database_snapshot.json");
 
 async function fetchSnapshot() {
   console.log("Generating high-performance database snapshot for static hosting / CDN...");
+  
+  let response: Response | null = null;
+  let lastError: any = null;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`Snapshot fetch attempt ${attempt} of ${maxAttempts}...`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 seconds
+
+      response = await fetch(TARGET_URL, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        console.log(`Successfully fetched snapshot data on attempt ${attempt}`);
+        break;
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Snapshot fetch attempt ${attempt} failed:`, err.message || err);
+      if (attempt < maxAttempts) {
+        const delay = attempt * 3000;
+        console.log(`Waiting ${delay / 1000} seconds before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
   try {
-    const response = await fetch(TARGET_URL);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (!response || !response.ok) {
+      throw lastError || new Error("Failed to fetch database snapshot after 3 attempts");
     }
     const text = await response.text();
     if (text.includes("<!DOCTYPE html>") || text.includes("<html") || text.includes("The script completed")) {

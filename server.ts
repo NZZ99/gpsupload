@@ -49,21 +49,45 @@ async function initializeCache() {
   console.log("Starting background fetch for Google Sheets database...");
   isWarmingUp = cachedData.length === 0;
   
+  let response: Response | null = null;
+  let lastError: any = null;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`Fetch attempt ${attempt} of ${maxAttempts}...`);
+      // 120-second timeout (2 minutes) to give ample time for the massive 5.2 MB JSON download or Google cold starts
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        console.log(`Successfully fetched Google Sheets data on attempt ${attempt}`);
+        break; // Exit retry loop on success
+      } else {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Fetch attempt ${attempt} failed:`, error.message || error);
+      if (attempt < maxAttempts) {
+        const delay = attempt * 3000; // Delay: 3s, 6s
+        console.log(`Waiting ${delay / 1000} seconds before retrying...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
   try {
-    // 50-second timeout to give ample time for the massive 5.2 MB JSON download
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 50000);
-
-    const response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status}`);
+    if (!response || !response.ok) {
+      throw lastError || new Error("Failed to fetch Google Sheets database after 3 attempts");
     }
 
     const text = await response.text();
