@@ -267,28 +267,6 @@ export default function App() {
                 </motion.div>
               ) : (
                 <>
-                  {/* Database Status Alerts */}
-                  {dbStatus.loading && (
-                    <div className="w-full bg-amber-50/90 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3 text-amber-800 shadow-xs">
-                      <RefreshCw className="w-4 h-4 animate-spin text-amber-500 mt-0.5 shrink-0" />
-                      <div className="flex-1 text-xs font-sans leading-relaxed">
-                        <p className="font-bold">စနစ်အတွင်း Google Sheets ဒေတာများ ထည့်သွင်းနေပါသည်...</p>
-                        <p className="text-amber-700/90 mt-0.5">ဒေတာပမာဏ (5MB ကျော်) ကြီးမားသဖြင့် ပထမဆုံးအကြိမ်တွင် ခေတ္တစောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။ (ထည့်သွင်းပြီးပါက ၂ စက္ကန့်အတွင်း အချိန်တိုအတွင်း ရှာဖွေနိုင်မည်ဖြစ်သည်)</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {dbStatus.error && !dbStatus.loading && (
-                    <div className="w-full bg-red-50 border border-red-200/80 rounded-2xl p-4 flex items-start gap-3 text-red-800 shadow-xs">
-                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs font-sans leading-relaxed">
-                        <p className="font-bold">Google Sheets ဒေတာရယူရန် ချိတ်ဆက်မှု အဆင်မပြေပါ</p>
-                        <p className="text-red-700/95 mt-0.5">အမှားအယွင်း: {dbStatus.error}</p>
-                        <p className="text-red-600 mt-1 font-medium">ပြင်ဆင်ရန် - Apps Script ကို Deploy လုပ်စဉ် "Who has access: Anyone" သေချာစွာရွေးချယ်ခဲ့ခြင်းရှိမရှိ စစ်ဆေးပေးပါ။</p>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Elegant Morphic Search Bar with Circular Search Button on Right */}
                   <form 
                     onSubmit={handleSearchSubmit}
