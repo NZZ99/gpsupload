@@ -313,6 +313,21 @@ export default function App() {
     );
   };
 
+  // Sanitizer to allow only decimal coordinates (numbers, one decimal point, and one leading minus)
+  const cleanCoordinateInput = (val: string) => {
+    let cleaned = val.replace(/[^0-9.-]/g, "");
+    if (cleaned.startsWith("-")) {
+      cleaned = "-" + cleaned.slice(1).replace(/-/g, "");
+    } else {
+      cleaned = cleaned.replace(/-/g, "");
+    }
+    const parts = cleaned.split(".");
+    if (parts.length > 2) {
+      cleaned = parts[0] + "." + parts.slice(1).join("");
+    }
+    return cleaned;
+  };
+
   // Submit/Upload data handler
   const handleUpload = async () => {
     if (!selectedRecord) {
@@ -327,17 +342,71 @@ export default function App() {
     setIsUploading(true);
     setError(null);
     try {
-      const response = await fetch("/api/upload-external", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          searchResult: selectedRecord,
-          latitude,
-          longitude,
-        }),
-      });
+      let uploadSuccess = false;
 
-      if (!response.ok) {
+      // 1. First, try the local API proxy (works perfectly in local/production Node server context)
+      try {
+        console.log("Trying local server upload API proxy...");
+        const response = await fetch("/api/upload-external", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            searchResult: selectedRecord,
+            latitude,
+            longitude,
+          }),
+        });
+
+        if (response.ok) {
+          uploadSuccess = true;
+          console.log("Local server upload API proxy succeeded!");
+        } else {
+          console.warn("Local server upload API proxy failed or returned not-ok status:", response.status);
+        }
+      } catch (localErr) {
+        console.warn("Local server upload API proxy threw error, falling back to direct client-side Google Apps Script upload:", localErr);
+      }
+
+      // 2. If local server proxy fails or is unavailable (e.g. on static hosting like GitHub Pages),
+      // we perform a direct client-side call to Google Apps Script Web App.
+      if (!uploadSuccess) {
+        console.log("Initiating direct client-side Google Apps Script upload (fallback for GitHub hosting)...");
+        const targetUrl = "https://script.google.com/macros/s/AKfycbymBas6qUXKdtbcwYqBmniLjCHDSWuJtRmZf9KpX6S6RpfgfxCnI5rQHjQUEomP6k95Ag/exec";
+
+        // Build URL parameters for Apps Script
+        const params = new URLSearchParams();
+        const gpsValue = `${latitude || ""}, ${longitude || ""}`;
+        params.set("latitude", String(latitude || ""));
+        params.set("longitude", String(longitude || ""));
+        params.set("Gps", gpsValue);
+        
+        const comCodeVal = selectedRecord["com-code"] || selectedRecord["com_code"] || selectedRecord["ID"] || selectedRecord["id"] || "";
+        const ledgerVal = selectedRecord["Ledger-code"] || selectedRecord["ledger_code"] || selectedRecord["ledger"] || selectedRecord["Ledger"] || "";
+        const meterVal = selectedRecord["Meter-No"] || selectedRecord["meter_no"] || selectedRecord["meter"] || selectedRecord["Meter"] || "";
+        const nameVal = selectedRecord["Name"] || selectedRecord["name"] || selectedRecord["အမည်"] || "";
+        const addressVal = selectedRecord["Address"] || selectedRecord["address"] || selectedRecord["နေရပ်လိပ်စာ"] || selectedRecord["မြို့နယ်"] || "";
+
+        params.set("com-code", String(comCodeVal));
+        params.set("ledger", String(ledgerVal));
+        params.set("meter", String(meterVal));
+        params.set("name", String(nameVal));
+        params.set("address", String(addressVal));
+        params.set("fullData", JSON.stringify(selectedRecord));
+
+        const directUrl = `${targetUrl}?${params.toString()}`;
+
+        // We use mode: "no-cors" so that the browser successfully completes the request redirect flow
+        // to Google's content servers without throwing CORS/Same-Origin exception blockages.
+        await fetch(directUrl, {
+          method: "POST",
+          mode: "no-cors"
+        });
+
+        uploadSuccess = true;
+        console.log("Direct client-side Google Apps Script upload succeeded under no-cors mode.");
+      }
+
+      if (!uploadSuccess) {
         throw new Error("ပေးပို့မှု မအောင်မြင်ပါ။ ပြန်လည်ကြိုးစားကြည့်ပါ။");
       }
 
@@ -574,10 +643,13 @@ export default function App() {
                                 <input
                                   type="text"
                                   id="latitude"
+                                  inputMode="decimal"
+                                  pattern="[0-9.-]*"
                                   placeholder="ဥပမာ: 16.8409"
                                   value={latitude}
                                   onChange={(e) => {
-                                    setLatitude(e.target.value);
+                                    const cleaned = cleanCoordinateInput(e.target.value);
+                                    setLatitude(cleaned);
                                     setUploadSuccess(false);
                                   }}
                                   className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
@@ -591,10 +663,13 @@ export default function App() {
                                 <input
                                   type="text"
                                   id="longitude"
+                                  inputMode="decimal"
+                                  pattern="[0-9.-]*"
                                   placeholder="ဥပမာ: 96.1735"
                                   value={longitude}
                                   onChange={(e) => {
-                                    setLongitude(e.target.value);
+                                    const cleaned = cleanCoordinateInput(e.target.value);
+                                    setLongitude(cleaned);
                                     setUploadSuccess(false);
                                   }}
                                   className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
