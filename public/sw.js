@@ -1,6 +1,17 @@
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open("lat-long-cache").then((cache) => cache.addAll(["/", "/index.html"])));
+  self.skipWaiting();
 });
+
+self.addEventListener("activate", (e) => {
+  e.waitUntil(clients.claim());
+});
+
 self.addEventListener("fetch", (e) => {
-  e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request)));
+  // Network-First strategy: tries to get the latest file over the network,
+  // falls back to cache if offline. This is highly robust for dynamic builds.
+  e.respondWith(
+    fetch(e.request).catch(() => {
+      return caches.match(e.request);
+    })
+  );
 });

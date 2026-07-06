@@ -45,6 +45,20 @@ export default function App() {
   useEffect(() => {
     let loadedFromCache = false;
 
+    // Safely write to localStorage with quota check and try-catch
+    const safeSaveToLocalStorage = (key: string, value: string) => {
+      try {
+        // 5MB is roughly 5,000,000 characters. Let's limit cache to 3.5MB to be safe and avoid QuotaExceededError
+        if (value.length < 3.5 * 1024 * 1024) {
+          localStorage.setItem(key, value);
+        } else {
+          console.log(`Database size (${(value.length / 1024 / 1024).toFixed(2)}MB) is too large for LocalStorage. Skipping cache.`);
+        }
+      } catch (e) {
+        console.warn("Could not save database cache to LocalStorage:", e);
+      }
+    };
+
     // 1. Try to load instantly from LocalStorage cache (takes ~10-20ms)
     const cachedCsv = localStorage.getItem("cached_csv_records");
     if (cachedCsv) {
@@ -76,11 +90,7 @@ export default function App() {
             setLocalRecords(data);
             setIsDbLoading(false);
             console.log(`Loaded ${data.length} records instantly from CDN snapshot!`);
-            try {
-              localStorage.setItem("cached_csv_records", Papa.unparse(data));
-            } catch (e) {
-              console.error("Failed to write snapshot to LocalStorage:", e);
-            }
+            safeSaveToLocalStorage("cached_csv_records", Papa.unparse(data));
           }
         })
         .catch(err => {
@@ -101,7 +111,7 @@ export default function App() {
             if (parsed.data && parsed.data.length > 0) {
               setLocalRecords(parsed.data);
               setIsDbLoading(false);
-              localStorage.setItem("cached_csv_records", csvText);
+              safeSaveToLocalStorage("cached_csv_records", csvText);
               console.log(`Loaded & cached ${parsed.data.length} records freshly from server CSV.`);
               fetchSuccessful = true;
             }
@@ -175,7 +185,7 @@ export default function App() {
                 setLocalRecords(parsedData);
                 setIsDbLoading(false);
                 const serialized = Papa.unparse(parsedData);
-                localStorage.setItem("cached_csv_records", serialized);
+                safeSaveToLocalStorage("cached_csv_records", serialized);
                 console.log(`Loaded & cached ${parsedData.length} records directly from Google Apps Script Web App.`);
                 fetchSuccessful = true;
               }
@@ -199,6 +209,11 @@ export default function App() {
   const performSearch = (query: string) => {
     latestQueryRef.current = query;
     const cleanQuery = query.trim();
+
+    // Clear old coordinate fields when searching for a new code
+    setLatitude("");
+    setLongitude("");
+    setDdValue("");
 
     if (cleanQuery === "") {
       setSearchResults([]);
@@ -292,6 +307,10 @@ export default function App() {
       setSelectedRecord(null);
       setSearchResults([]);
       setHasSearched(false);
+      // Clear coordinates when the input is cleared
+      setLatitude("");
+      setLongitude("");
+      setDdValue("");
     }
   };
 
@@ -668,6 +687,9 @@ export default function App() {
                       setInputValue("");
                       setSearchResults([]);
                       setSelectedRecord(null);
+                      setLatitude("");
+                      setLongitude("");
+                      setDdValue("");
                       setUploadSuccess(false);
                       setHasSearched(false);
                     }}
@@ -705,6 +727,10 @@ export default function App() {
                           setSelectedRecord(null);
                           setUploadSuccess(false);
                           setHasSearched(false);
+                          // Clear coordinates when the search is cleared
+                          setLatitude("");
+                          setLongitude("");
+                          setDdValue("");
                         }}
                         className="p-1 rounded-full hover:bg-zinc-100 transition-colors"
                       >
