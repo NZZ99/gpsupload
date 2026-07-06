@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
-  Search, MapPin, ArrowUp, Check, RefreshCw, AlertCircle, Navigation, X, ShieldCheck, Delete
+  Search, MapPin, ArrowUp, Check, RefreshCw, AlertCircle, Navigation, X, ShieldCheck, Delete, Copy
 } from "lucide-react";
 import Papa from "papaparse";
 
@@ -23,6 +23,8 @@ export default function App() {
   // Coordinate Inputs
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [ddValue, setDdValue] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const latestQueryRef = useRef("");
@@ -328,13 +330,158 @@ export default function App() {
     return cleaned;
   };
 
+  // Converts various DMS, DDM, and raw coordinate string formats to standard DD (Decimal Degrees)
+  const convertToDecimalDegrees = (val: string): string => {
+    const trimmed = val.trim();
+    if (!trimmed) return "";
+
+    const isNegative = trimmed.startsWith("-");
+    // Clean all characters except numbers, dots, and minus sign, but keep spaces/symbols as delimiters
+    // We can use a regex to match integers and decimals.
+    const matches = trimmed.match(/\d+(\.\d+)?/g);
+    if (!matches || matches.length === 0) return trimmed;
+
+    if (matches.length === 3) {
+      const deg = parseFloat(matches[0]);
+      const min = parseFloat(matches[1]);
+      const sec = parseFloat(matches[2]);
+      const dd = deg + (min / 60) + (sec / 3600);
+      return (isNegative ? -dd : dd).toFixed(6);
+    }
+
+    if (matches.length === 2) {
+      const deg = parseFloat(matches[0]);
+      const min = parseFloat(matches[1]);
+      const dd = deg + (min / 60);
+      return (isNegative ? -dd : dd).toFixed(6);
+    }
+
+    if (matches.length === 1) {
+      const numStr = matches[0];
+      const dotIndex = numStr.indexOf('.');
+      const integerPart = dotIndex !== -1 ? numStr.slice(0, dotIndex) : numStr;
+      const decimalPart = dotIndex !== -1 ? numStr.slice(dotIndex) : "";
+      const L = integerPart.length;
+
+      if (L >= 5) {
+        // DDMMSS.ssss format
+        const secStr = integerPart.slice(L - 2) + decimalPart;
+        const minStr = integerPart.slice(L - 4, L - 2);
+        const degStr = integerPart.slice(0, L - 4);
+        
+        const deg = parseFloat(degStr || "0");
+        const min = parseFloat(minStr || "0");
+        const sec = parseFloat(secStr || "0");
+        
+        const dd = deg + (min / 60) + (sec / 3600);
+        return (isNegative ? -dd : dd).toFixed(6);
+      } else if (L === 3 || L === 4) {
+        // DDMM.mmmm format
+        const minStr = integerPart.slice(L - 2) + decimalPart;
+        const degStr = integerPart.slice(0, L - 2);
+        
+        const deg = parseFloat(degStr || "0");
+        const min = parseFloat(minStr || "0");
+        
+        const dd = deg + (min / 60);
+        return (isNegative ? -dd : dd).toFixed(6);
+      } else {
+        // Already DD format
+        const dd = parseFloat(numStr);
+        return (isNegative ? -dd : dd).toFixed(6);
+      }
+    }
+
+    return trimmed;
+  };
+
+  // Synchronize decimal degrees (DD) value when latitude or longitude changes
+  useEffect(() => {
+    if (document.activeElement?.id === "decimalDegrees") {
+      return;
+    }
+    const computedLat = convertToDecimalDegrees(latitude);
+    const computedLng = convertToDecimalDegrees(longitude);
+    if (computedLat && computedLng) {
+      setDdValue(`${computedLat}, ${computedLng}`);
+    } else if (!computedLat && !computedLng) {
+      setDdValue("");
+    } else {
+      setDdValue(`${computedLat || ""}${computedLat && computedLng ? ", " : ""}${computedLng || ""}`);
+    }
+  }, [latitude, longitude]);
+
+  // Handle direct manual copy of the Decimal Degrees (DD) format
+  const handleCopyDD = () => {
+    if (!ddValue.trim()) return;
+    navigator.clipboard.writeText(ddValue.trim());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Handle direct manual editing or pasting into the Decimal Degrees (DD) field
+  const handleDdChange = (val: string) => {
+    setDdValue(val);
+    setUploadSuccess(false);
+
+    // Clean split logic if user pasted or types comma-separated coordinates
+    if (!val.trim()) {
+      setLatitude("");
+      setLongitude("");
+      return;
+    }
+
+    const parts = val.split(",");
+    if (parts.length >= 2) {
+      const latPart = cleanCoordinateInput(parts[0].trim());
+      const lngPart = cleanCoordinateInput(parts[1].trim());
+
+      setLatitude(latPart);
+      setLongitude(lngPart);
+    } else {
+      // If typing and no comma yet, update latitude only
+      const latPart = cleanCoordinateInput(val.trim());
+      setLatitude(latPart);
+    }
+  };
+
+  // Format DD field on blur to clean any unformatted coordinate styles
+  const handleDdBlur = () => {
+    if (!ddValue.trim()) return;
+    const parts = ddValue.split(",");
+    if (parts.length >= 2) {
+      const originalLat = parts[0].trim();
+      const originalLng = parts[1].trim();
+      setLatitude(originalLat);
+      setLongitude(originalLng);
+      
+      const latPart = convertToDecimalDegrees(originalLat);
+      const lngPart = convertToDecimalDegrees(originalLng);
+      setDdValue(`${latPart}, ${lngPart}`);
+    } else {
+      const originalLat = ddValue.trim();
+      setLatitude(originalLat);
+      const latPart = convertToDecimalDegrees(originalLat);
+      setDdValue(latPart);
+    }
+  };
+
   // Submit/Upload data handler
   const handleUpload = async () => {
     if (!selectedRecord) {
       alert("အချက်အလက် တစ်ခုအား အရင်ဦးစွာ ရွေးချယ်ပေးပါ။");
       return;
     }
-    if (!latitude.trim() || !longitude.trim()) {
+    
+    // Ensure we convert coordinates to proper Decimal Degrees before validating or sending
+    const finalLat = convertToDecimalDegrees(latitude);
+    const finalLng = convertToDecimalDegrees(longitude);
+    const finalDd = `${finalLat}, ${finalLng}`;
+
+    // Update state to show the formatted value in the DD UI (do NOT overwrite Latitude and Longitude boxes)
+    setDdValue(finalDd);
+
+    if (!finalLat.trim() || !finalLng.trim()) {
       alert("Latitude နှင့် Longitude ကို ဖြည့်စွက်ပေးပါ။");
       return;
     }
@@ -352,8 +499,9 @@ export default function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             searchResult: selectedRecord,
-            latitude,
-            longitude,
+            latitude: finalLat,
+            longitude: finalLng,
+            ddValue: finalDd, // Send converted DD coordinates
           }),
         });
 
@@ -375,16 +523,25 @@ export default function App() {
 
         // Build URL parameters for Apps Script
         const params = new URLSearchParams();
-        const gpsValue = `${latitude || ""}, ${longitude || ""}`;
-        params.set("latitude", String(latitude || ""));
-        params.set("longitude", String(longitude || ""));
+        const gpsValue = finalDd.trim() || `${finalLat || ""}, ${finalLng || ""}`;
+        params.set("latitude", String(finalLat || ""));
+        params.set("longitude", String(finalLng || ""));
         params.set("Gps", gpsValue);
+
+        // Dynamically copy all original properties from the selected record to params
+        if (selectedRecord) {
+          for (const [k, v] of Object.entries(selectedRecord)) {
+            if (v !== undefined && v !== null) {
+              params.set(k, String(v));
+            }
+          }
+        }
         
-        const comCodeVal = selectedRecord["com-code"] || selectedRecord["com_code"] || selectedRecord["ID"] || selectedRecord["id"] || "";
-        const ledgerVal = selectedRecord["Ledger-code"] || selectedRecord["ledger_code"] || selectedRecord["ledger"] || selectedRecord["Ledger"] || "";
-        const meterVal = selectedRecord["Meter-No"] || selectedRecord["meter_no"] || selectedRecord["meter"] || selectedRecord["Meter"] || "";
-        const nameVal = selectedRecord["Name"] || selectedRecord["name"] || selectedRecord["အမည်"] || "";
-        const addressVal = selectedRecord["Address"] || selectedRecord["address"] || selectedRecord["နေရပ်လိပ်စာ"] || selectedRecord["မြို့နယ်"] || "";
+        const comCodeVal = selectedRecord ? (selectedRecord["com-code"] || selectedRecord["com_code"] || selectedRecord["ID"] || selectedRecord["id"] || "") : "";
+        const ledgerVal = selectedRecord ? (selectedRecord["Ledger-code"] || selectedRecord["ledger_code"] || selectedRecord["ledger"] || selectedRecord["Ledger"] || "") : "";
+        const meterVal = selectedRecord ? (selectedRecord["Meter-No"] || selectedRecord["meter_no"] || selectedRecord["meter"] || selectedRecord["Meter"] || "") : "";
+        const nameVal = selectedRecord ? (selectedRecord["Name"] || selectedRecord["name"] || selectedRecord["အမည်"] || "") : "";
+        const addressVal = selectedRecord ? (selectedRecord["Address"] || selectedRecord["address"] || selectedRecord["နေရပ်လိပ်စာ"] || selectedRecord["မြို့နယ်"] || "") : "";
 
         params.set("com-code", String(comCodeVal));
         params.set("ledger", String(ledgerVal));
@@ -674,6 +831,36 @@ export default function App() {
                                   }}
                                   className="w-full p-3 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
                                 />
+                              </div>
+                            </div>
+
+                            {/* Decimal Degrees (DD) Converter Box */}
+                            <div className="pt-3 border-t border-zinc-100">
+                              <label htmlFor="decimalDegrees" className="block text-[10px] font-bold text-black mb-1">
+                                Decimal Degrees (DD)
+                              </label>
+                              <div className="relative flex items-center">
+                                <input
+                                  type="text"
+                                  id="decimalDegrees"
+                                  placeholder="ဥပမာ: 16.8409, 96.1735"
+                                  value={ddValue}
+                                  onChange={(e) => handleDdChange(e.target.value)}
+                                  onBlur={handleDdBlur}
+                                  className="w-full p-3 pr-12 bg-zinc-50 border border-zinc-200 rounded-xl outline-none focus:border-zinc-500 transition-colors font-mono text-sm"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleCopyDD}
+                                  className="absolute right-2 p-2 text-zinc-500 hover:text-black hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
+                                  title="Copy Decimal Degrees"
+                                >
+                                  {copied ? (
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
+                                  )}
+                                </button>
                               </div>
                             </div>
                           </div>

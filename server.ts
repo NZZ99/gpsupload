@@ -255,19 +255,26 @@ app.post("/api/search-external", async (req, res) => {
 // 2. Dispatch data payload with location coordinates to the destination Google Apps Script
 app.post("/api/upload-external", async (req, res) => {
   try {
-    const { searchResult, latitude, longitude } = req.body;
+    const { searchResult, latitude, longitude, ddValue } = req.body;
 
     const targetUrl = "https://script.google.com/macros/s/AKfycbymBas6qUXKdtbcwYqBmniLjCHDSWuJtRmZf9KpX6S6RpfgfxCnI5rQHjQUEomP6k95Ag/exec";
 
     // Format query parameters nicely for Google Apps Script endpoint
     const params = new URLSearchParams();
     
-    const gpsValue = `${latitude || ""}, ${longitude || ""}`;
+    const gpsValue = ddValue || `${latitude || ""}, ${longitude || ""}`;
     params.set("latitude", String(latitude || ""));
     params.set("longitude", String(longitude || ""));
     params.set("Gps", gpsValue);
     
     if (typeof searchResult === "object" && searchResult !== null) {
+      // Set all keys from searchResult directly in params first to ensure any original column names (including Myanmar language headers) are passed!
+      for (const [k, v] of Object.entries(searchResult)) {
+        if (v !== undefined && v !== null) {
+          params.set(k, String(v));
+        }
+      }
+
       // Safely extract values from all possible variations of incoming sheet keys
       const comCodeVal = searchResult["com-code"] || searchResult["com_code"] || searchResult["ID"] || searchResult["id"] || "";
       const ledgerVal = searchResult["Ledger-code"] || searchResult["ledger_code"] || searchResult["ledger"] || searchResult["Ledger"] || "";
@@ -307,6 +314,7 @@ app.post("/api/upload-external", async (req, res) => {
       meter: meterVal,
       name: nameVal,
       address: addressVal,
+      ...(typeof searchResult === "object" ? searchResult : {})
     };
 
     let response: Response | null = null;
