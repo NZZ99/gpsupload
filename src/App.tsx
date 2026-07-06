@@ -316,7 +316,7 @@ export default function App() {
   };
 
   // Sanitizer to allow only decimal coordinates (numbers, one decimal point, and one leading minus)
-  const cleanCoordinateInput = (val: string) => {
+  const cleanCoordinateInput = (val: string, isLongitude = false) => {
     let cleaned = val.replace(/[^0-9.-]/g, "");
     if (cleaned.startsWith("-")) {
       cleaned = "-" + cleaned.slice(1).replace(/-/g, "");
@@ -326,6 +326,16 @@ export default function App() {
     const parts = cleaned.split(".");
     if (parts.length > 2) {
       cleaned = parts[0] + "." + parts.slice(1).join("");
+    }
+    if (isLongitude) {
+      if (cleaned.startsWith("0") && cleaned.length > 1 && cleaned[1] !== ".") {
+        cleaned = cleaned.replace(/^0+/, "");
+      } else if (cleaned.startsWith("-0") && cleaned.length > 2 && cleaned[2] !== ".") {
+        cleaned = "-" + cleaned.slice(2).replace(/^0+/, "");
+      }
+      // If we stripped all zeros before a number (e.g. "00"), make sure it doesn't become empty if it was just zeros
+      if (cleaned === "" && val.includes("0")) cleaned = "0";
+      if (cleaned === "-" && val.includes("-0")) cleaned = "-0";
     }
     return cleaned;
   };
@@ -434,7 +444,7 @@ export default function App() {
     const parts = val.split(",");
     if (parts.length >= 2) {
       const latPart = cleanCoordinateInput(parts[0].trim());
-      const lngPart = cleanCoordinateInput(parts[1].trim());
+      const lngPart = cleanCoordinateInput(parts[1].trim(), true);
 
       setLatitude(latPart);
       setLongitude(lngPart);
@@ -825,7 +835,7 @@ export default function App() {
                                   placeholder="ဥပမာ: 96.1735"
                                   value={longitude}
                                   onChange={(e) => {
-                                    const cleaned = cleanCoordinateInput(e.target.value);
+                                    const cleaned = cleanCoordinateInput(e.target.value, true);
                                     setLongitude(cleaned);
                                     setUploadSuccess(false);
                                   }}
