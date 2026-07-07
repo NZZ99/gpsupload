@@ -232,23 +232,27 @@ app.post("/api/search-external", async (req, res) => {
     const { query } = req.body;
 
     if (!query || typeof query !== "string" || query.trim() === "") {
-      return res.json({ results: cachedData });
+      return res.json({ results: [] });
     }
 
     const cleanQuery = query.toLowerCase().trim();
 
-    // Fast-filtering logic matching query against any object column/attribute
+    // Only allow searches with exactly 6 characters/digits
+    if (cleanQuery.length !== 6) {
+      return res.json({ results: [] });
+    }
+
+    // Fast-filtering logic matching query against com-code column exactly
     const filtered = cachedData.filter((item: any) => {
       if (!item) return false;
-      return Object.values(item).some(val => 
-        String(val || "").toLowerCase().includes(cleanQuery)
-      );
+      const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
+      return comCode === cleanQuery;
     });
 
     res.json({ results: filtered });
   } catch (error: any) {
     console.error("Search API execution failed:", error);
-    res.json({ results: defaultFallbackRecords });
+    res.json({ results: [] });
   }
 });
 

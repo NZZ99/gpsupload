@@ -228,6 +228,14 @@ export default function App() {
     setSelectedRecord(null);
     setUploadSuccess(false);
 
+    // Only allow searches with exactly 6 characters/digits
+    if (cleanQuery.length !== 6) {
+      setSearchResults([]);
+      setSelectedRecord(null);
+      setIsSearching(false);
+      return;
+    }
+
     const cleanQueryLower = cleanQuery.toLowerCase();
     const hasRealData = localRecords.length > 10;
 
@@ -235,9 +243,8 @@ export default function App() {
     if (hasRealData) {
       const results = localRecords.filter((item) => {
         if (!item) return false;
-        return Object.values(item).some(val => 
-          String(val || "").toLowerCase().includes(cleanQueryLower)
-        );
+        const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
+        return comCode === cleanQueryLower;
       });
 
       setSearchResults(results);
@@ -272,9 +279,8 @@ export default function App() {
       .catch((err) => {
         console.error("Server fallback search failed, using fallback:", err);
         const fallbackResults = defaultFallbackRecords.filter((item) => {
-          return Object.values(item).some(val => 
-            String(val || "").toLowerCase().includes(cleanQueryLower)
-          );
+          const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
+          return comCode === cleanQueryLower;
         });
         if (latestQueryRef.current === query) {
           setSearchResults(fallbackResults);
