@@ -844,7 +844,7 @@ export default function App() {
                                   id="latitude"
                                   inputMode="decimal"
                                   pattern="[0-9.-]*"
-                                  placeholder="ဥပမာ: 207840.39"
+                                  placeholder="ဥပမာ: 1234.5678"
                                   value={latitude}
                                   onChange={(e) => {
                                     const cleaned = cleanCoordinateInput(e.target.value);
@@ -864,7 +864,7 @@ export default function App() {
                                   id="longitude"
                                   inputMode="decimal"
                                   pattern="[0-9.-]*"
-                                  placeholder="ဥပမာ: 970482.72"
+                                  placeholder="ဥပမာ: 1234.5678"
                                   value={longitude}
                                   onChange={(e) => {
                                     const cleaned = cleanCoordinateInput(e.target.value, true);
@@ -885,7 +885,7 @@ export default function App() {
                                 <input
                                   type="text"
                                   id="decimalDegrees"
-                                  placeholder="ဥပမာ: 20.7840399, 97.0482723"
+                                  placeholder="ဥပမာ: 20.7840, 97.0482"
                                   value={ddValue}
                                   onChange={(e) => handleDdChange(e.target.value)}
                                   onBlur={handleDdBlur}
