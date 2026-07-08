@@ -12,18 +12,35 @@ async function fetchSnapshot() {
   const maxAttempts = 3;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let timeoutId: any = null;
     try {
       console.log(`Snapshot fetch attempt ${attempt} of ${maxAttempts}...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 seconds
+      timeoutId = setTimeout(() => controller.abort(), 120000); // 120 seconds
 
       response = await fetch(TARGET_URL, {
         method: "GET",
-        redirect: "follow",
+        redirect: "manual",
         signal: controller.signal
       });
 
+      // Handle redirect manually to bypass Node.js fetch redirect-following bugs
+      if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+        const redirectUrl = response.headers.get("location");
+        if (redirectUrl) {
+          console.log(`Following redirect to: ${redirectUrl.slice(0, 80)}...`);
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => controller.abort(), 120000);
+
+          response = await fetch(redirectUrl, {
+            method: "GET",
+            signal: controller.signal
+          });
+        }
+      }
+
       clearTimeout(timeoutId);
+      timeoutId = null;
 
       if (response.ok) {
         console.log(`Successfully fetched snapshot data on attempt ${attempt}`);
@@ -32,6 +49,10 @@ async function fetchSnapshot() {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (err: any) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       lastError = err;
       console.warn(`Snapshot fetch attempt ${attempt} failed:`, err.message || err);
       if (attempt < maxAttempts) {

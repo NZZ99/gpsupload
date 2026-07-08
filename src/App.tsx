@@ -123,11 +123,22 @@ export default function App() {
 
       // If server API fails (e.g. running on GitHub Pages as static site), fetch directly from the Google Apps Script Web App!
       if (!fetchSuccessful) {
+        let directTimeoutId: any = null;
         try {
           console.log("Attempting direct cross-origin fetch from Google Apps Script web app...");
+          const controller = new AbortController();
+          directTimeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
           const response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
-            method: "GET"
+            method: "GET",
+            signal: controller.signal
           });
+
+          if (directTimeoutId) {
+            clearTimeout(directTimeoutId);
+            directTimeoutId = null;
+          }
+
           if (response.ok) {
             const text = await response.text();
             
@@ -192,6 +203,10 @@ export default function App() {
             }
           }
         } catch (directErr) {
+          if (directTimeoutId) {
+            clearTimeout(directTimeoutId);
+            directTimeoutId = null;
+          }
           console.error("Direct Google Apps Script fetch failed too:", directErr);
         }
       }

@@ -54,19 +54,36 @@ async function initializeCache() {
   const maxAttempts = 3;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let timeoutId: any = null;
     try {
       console.log(`Fetch attempt ${attempt} of ${maxAttempts}...`);
       // 120-second timeout (2 minutes) to give ample time for the massive 5.2 MB JSON download or Google cold starts
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      timeoutId = setTimeout(() => controller.abort(), 120000);
 
       response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
         method: "GET",
-        redirect: "follow",
+        redirect: "manual",
         signal: controller.signal
       });
 
+      // Handle redirect manually to bypass Node.js fetch redirect-following bugs
+      if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
+        const redirectUrl = response.headers.get("location");
+        if (redirectUrl) {
+          console.log(`Following redirect to: ${redirectUrl.slice(0, 80)}...`);
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => controller.abort(), 120000);
+
+          response = await fetch(redirectUrl, {
+            method: "GET",
+            signal: controller.signal
+          });
+        }
+      }
+
       clearTimeout(timeoutId);
+      timeoutId = null;
 
       if (response.ok) {
         console.log(`Successfully fetched Google Sheets data on attempt ${attempt}`);
@@ -75,6 +92,10 @@ async function initializeCache() {
         throw new Error(`HTTP Error: ${response.status}`);
       }
     } catch (error: any) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       lastError = error;
       console.warn(`Fetch attempt ${attempt} failed:`, error.message || error);
       if (attempt < maxAttempts) {
