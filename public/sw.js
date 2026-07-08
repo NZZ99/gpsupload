@@ -1,5 +1,5 @@
 // Version cache-buster to force re-registration and clear older caches
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v8";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
