@@ -844,7 +844,7 @@ export default function App() {
                           <div className="bg-black text-white border border-black rounded-2xl shadow-sm p-4 flex items-center gap-3">
                             <AlertCircle className="w-5 h-5 text-white shrink-0 animate-pulse" />
                             <div className="flex-1 text-xs sm:text-sm font-sans font-bold leading-relaxed">
-                              Lat-Long 7လုံးဆို ဒသမ နောက်ဆုံး ၃ လုံးနေရာမှာထည့် ပါ
+                              Lat-Long 7လုံးဖြစ်ပါက ဒဿမ နောက်ဆုံး ၃ လုံးနေရာမှာထည့်ပါ။
                             </div>
                           </div>
 
