@@ -825,6 +825,14 @@ export default function App() {
                             </div>
                           </div>
 
+                          {/* Clean High-Contrast Advisory Card (Black & White Theme) */}
+                          <div className="bg-black text-white border border-black rounded-2xl shadow-sm p-4 flex items-center gap-3">
+                            <AlertCircle className="w-5 h-5 text-white shrink-0 animate-pulse" />
+                            <div className="flex-1 text-xs sm:text-sm font-sans font-bold leading-relaxed">
+                              Lat-Long 7လုံးဆို ဒသမ နောက်ဆုံး ၃ လုံးနေရာမှာထည့် ပါ
+                            </div>
+                          </div>
+
                           {/* Coordinates Selection Box */}
                           <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-xs p-5 space-y-4">
                             <div className="flex items-center gap-1 border-b border-zinc-100 pb-2">
