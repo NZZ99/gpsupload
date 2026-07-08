@@ -844,7 +844,7 @@ export default function App() {
                                   id="latitude"
                                   inputMode="decimal"
                                   pattern="[0-9.-]*"
-                                  placeholder="ဥပမာ: 1234.5678"
+                                  placeholder="ဥပမာ: 207840.39"
                                   value={latitude}
                                   onChange={(e) => {
                                     const cleaned = cleanCoordinateInput(e.target.value);
@@ -864,7 +864,7 @@ export default function App() {
                                   id="longitude"
                                   inputMode="decimal"
                                   pattern="[0-9.-]*"
-                                  placeholder="ဥပမာ: 1234.5678"
+                                  placeholder="ဥပမာ: 970482.72"
                                   value={longitude}
                                   onChange={(e) => {
                                     const cleaned = cleanCoordinateInput(e.target.value, true);
