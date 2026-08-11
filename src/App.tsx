@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
-  Search, MapPin, ArrowUp, Check, RefreshCw, AlertCircle, Navigation, X, ShieldCheck, Delete, Copy
+  Search, MapPin, ArrowUp, Check, RefreshCw, AlertCircle, Navigation, X, ShieldCheck, Delete, Copy, Map
 } from "lucide-react";
 import Papa from "papaparse";
 
@@ -254,7 +254,7 @@ export default function App() {
     const cleanQueryLower = cleanQuery.toLowerCase();
     const hasRealData = localRecords.length > 10;
 
-    // 1. If we have real client-side cached records loaded in memory, search them instantly! (< 1ms!)
+    // 1. If we have real client-side cached records loaded in memory, check them first for instant response
     if (hasRealData) {
       const results = localRecords.filter((item) => {
         if (!item) return false;
@@ -262,20 +262,21 @@ export default function App() {
         return comCode === cleanQueryLower;
       });
 
-      setSearchResults(results);
       if (results.length > 0) {
+        setSearchResults(results);
         setSelectedRecord(results[0]);
-      } else {
-        setSelectedRecord(null);
+        setIsSearching(false);
+        return;
       }
-      setIsSearching(false);
-    } else {
-      // 2. Smart fallback search if snapshot is still loading (first ever load)
-      fetch("/api/search-external", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: cleanQuery }),
-      })
+      console.log(`Query '${cleanQuery}' not found in client snapshot. Checking server & Google Sheets for newly added records...`);
+    }
+
+    // 2. Fallback search to Server API (will fetch live Google Sheets data on cache miss for newly added rows!)
+    fetch("/api/search-external", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: cleanQuery }),
+    })
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.json();
@@ -286,13 +287,22 @@ export default function App() {
           setSearchResults(results);
           if (results.length > 0) {
             setSelectedRecord(results[0]);
+            // Update local memory with fresh dataset or append newly found record
+            if (data.updatedAllRecords && Array.isArray(data.updatedAllRecords) && data.updatedAllRecords.length > 0) {
+              setLocalRecords(data.updatedAllRecords);
+            } else {
+              setLocalRecords(prev => {
+                const exists = prev.some(r => String(r["com-code"] || r["com_code"] || r["ID"] || r["id"] || "").trim().toLowerCase() === cleanQueryLower);
+                return exists ? prev : [results[0], ...prev];
+              });
+            }
           } else {
             setSelectedRecord(null);
           }
         }
       })
       .catch((err) => {
-        console.error("Server fallback search failed, using fallback:", err);
+        console.error("Server search failed, using fallback:", err);
         const fallbackResults = defaultFallbackRecords.filter((item) => {
           const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
           return comCode === cleanQueryLower;
@@ -311,7 +321,6 @@ export default function App() {
           setIsSearching(false);
         }
       });
-    }
   };
 
   const handleSearchSubmit = (e?: React.FormEvent) => {
@@ -514,6 +523,17 @@ export default function App() {
       const latPart = convertToDecimalDegrees(originalLat);
       setDdValue(latPart);
     }
+  };
+
+  const handleGoToMap = () => {
+    const finalLat = convertToDecimalDegrees(latitude);
+    const finalLng = convertToDecimalDegrees(longitude);
+    if (!finalLat.trim() || !finalLng.trim()) {
+      alert("Latitude နှင့် Longitude ကို ဖြည့်စွက်ပေးပါ။");
+      return;
+    }
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${finalLat},${finalLng}`;
+    window.open(mapUrl, '_blank');
   };
 
   // Submit/Upload data handler
@@ -844,7 +864,7 @@ export default function App() {
                           <div className="bg-black text-white border border-black rounded-2xl shadow-sm p-4 flex items-center gap-3">
                             <AlertCircle className="w-5 h-5 text-white shrink-0 animate-pulse" />
                             <div className="flex-1 text-xs sm:text-sm font-sans font-bold leading-relaxed">
-                              Lat-Long 7လုံးဖြစ်ပါက ဒဿမ နောက်ဆုံး ၃ လုံးနေရာမှာထည့်ပါ။
+                              Lat-Long 7လုံးဆို ဒသမ နောက်ဆုံး ၃ လုံးနေရာမှာထည့် ပါ
                             </div>
                           </div>
 
@@ -932,6 +952,19 @@ export default function App() {
 
                           {/* Elongated Black Pill Dispatch Button */}
                           <div className="w-full flex flex-col items-center gap-3 pt-3">
+                            <button
+                              type="button"
+                              onClick={handleGoToMap}
+                              className="relative flex items-center justify-between w-full max-w-sm h-14 bg-[#18191d] text-white rounded-full pl-6 pr-2.5 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
+                            >
+                              <span className="font-sans font-bold tracking-wide text-sm text-zinc-100 transition-all">
+                                တည်နေရာ စစ်ရန်...
+                              </span>
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 group-hover:bg-zinc-700">
+                                <Map className="w-4 h-4 text-white" strokeWidth={2.5} />
+                              </div>
+                            </button>
+
                             <button
                               type="button"
                               onClick={handleUpload}

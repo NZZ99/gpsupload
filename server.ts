@@ -19,7 +19,9 @@ let isWarmingUp = true;
 let lastFetchedTime = 0;
 let cacheError: string | null = null;
 
-// Instantly load from local file cache if it exists for sub-millisecond warm up
+const SNAPSHOT_FILE = path.join(process.cwd(), "public", "database_snapshot.json");
+
+// Instantly load from local file cache or snapshot if it exists for sub-millisecond warm up
 try {
   if (fs.existsSync(CACHE_FILE)) {
     const cachedText = fs.readFileSync(CACHE_FILE, "utf8");
@@ -29,6 +31,17 @@ try {
       isWarmingUp = false;
       lastFetchedTime = fs.statSync(CACHE_FILE).mtimeMs;
       console.log(`Loaded ${cachedData.length} records instantly on startup from filesystem cache.`);
+    }
+  }
+  
+  if (cachedData.length === 0 && fs.existsSync(SNAPSHOT_FILE)) {
+    const snapshotText = fs.readFileSync(SNAPSHOT_FILE, "utf8");
+    const parsedSnapshot = JSON.parse(snapshotText);
+    if (Array.isArray(parsedSnapshot) && parsedSnapshot.length > 0) {
+      cachedData = parsedSnapshot;
+      isWarmingUp = false;
+      lastFetchedTime = fs.statSync(SNAPSHOT_FILE).mtimeMs;
+      console.log(`Loaded ${cachedData.length} records instantly on startup from database snapshot file.`);
     }
   }
 } catch (err) {
@@ -44,72 +57,64 @@ const defaultFallbackRecords = [
   { "ID": "77889", "အမည်": "ဦးလှမင်း", "ရာထူး": "ယာဉ်မောင်း", "မြို့နယ်": "လှိုင်", "ဖုန်း": "0931223344" }
 ];
 
+let cacheFetchPromise: Promise<void> | null = null;
+
 // Fetch from the search source Google Sheet web app provided by user
-async function initializeCache() {
-  console.log("Starting background fetch for Google Sheets database...");
-  isWarmingUp = cachedData.length === 0;
-  
-  let response: Response | null = null;
-  let lastError: any = null;
-  const maxAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    let timeoutId: any = null;
-    try {
-      console.log(`Fetch attempt ${attempt} of ${maxAttempts}...`);
-      // 120-second timeout (2 minutes) to give ample time for the massive 5.2 MB JSON download or Google cold starts
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
-        method: "GET",
-        redirect: "manual",
-        signal: controller.signal
-      });
-
-      // Handle redirect manually to bypass Node.js fetch redirect-following bugs
-      if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
-        const redirectUrl = response.headers.get("location");
-        if (redirectUrl) {
-          console.log(`Following redirect to: ${redirectUrl.slice(0, 80)}...`);
-          clearTimeout(timeoutId);
-          timeoutId = setTimeout(() => controller.abort(), 120000);
-
-          response = await fetch(redirectUrl, {
-            method: "GET",
-            signal: controller.signal
-          });
-        }
-      }
-
-      clearTimeout(timeoutId);
-      timeoutId = null;
-
-      if (response.ok) {
-        console.log(`Successfully fetched Google Sheets data on attempt ${attempt}`);
-        break; // Exit retry loop on success
-      } else {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-    } catch (error: any) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      lastError = error;
-      console.warn(`Fetch attempt ${attempt} failed:`, error.message || error);
-      if (attempt < maxAttempts) {
-        const delay = attempt * 3000; // Delay: 3s, 6s
-        console.log(`Waiting ${delay / 1000} seconds before retrying...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
+async function initializeCache(): Promise<void> {
+  if (cacheFetchPromise) {
+    return cacheFetchPromise;
   }
 
-  try {
-    if (!response || !response.ok) {
-      throw lastError || new Error("Failed to fetch Google Sheets database after 3 attempts");
+  cacheFetchPromise = (async () => {
+    console.log("Starting background fetch for Google Sheets database...");
+    isWarmingUp = cachedData.length === 0;
+    
+    let response: Response | null = null;
+    let lastError: any = null;
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let timeoutId: any = null;
+      try {
+        console.log(`Fetch attempt ${attempt} of ${maxAttempts}...`);
+        // 120-second timeout (2 minutes) to give ample time for the massive 5.2 MB JSON download or Google cold starts
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), 120000);
+
+        response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        timeoutId = null;
+
+        if (response.ok) {
+          console.log(`Successfully fetched Google Sheets data on attempt ${attempt}`);
+          break; // Exit retry loop on success
+        } else {
+          throw new Error(`HTTP Error: ${response.status}`);
+        }
+      } catch (error: any) {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        lastError = error;
+        console.warn(`Fetch attempt ${attempt} failed:`, error.message || error);
+        if (attempt < maxAttempts) {
+          const delay = attempt * 3000; // Delay: 3s, 6s
+          console.log(`Waiting ${delay / 1000} seconds before retrying...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
+
+    try {
+      if (!response || !response.ok) {
+        throw lastError || new Error("Failed to fetch Google Sheets database after 3 attempts");
+      }
 
     const text = await response.text();
     let parsed: any[] = [];
@@ -200,8 +205,10 @@ async function initializeCache() {
       
       // Persist to local filesystem cache for instant future starts
       try {
-        fs.writeFileSync(CACHE_FILE, JSON.stringify(validParsed), "utf8");
-        console.log("Saved successfully loaded Google Sheets data to local filesystem cache.");
+        const jsonStr = JSON.stringify(validParsed);
+        fs.writeFileSync(CACHE_FILE, jsonStr, "utf8");
+        fs.writeFileSync(SNAPSHOT_FILE, jsonStr, "utf8");
+        console.log("Saved successfully loaded Google Sheets data to local filesystem cache & snapshot.");
       } catch (err) {
         console.error("Failed to save loaded database to local filesystem cache:", err);
       }
@@ -217,7 +224,12 @@ async function initializeCache() {
       cachedData = defaultFallbackRecords;
     }
     isWarmingUp = false;
+  } finally {
+    cacheFetchPromise = null;
   }
+})();
+
+  return cacheFetchPromise;
 }
 
 // Start caching on background
@@ -264,13 +276,24 @@ app.post("/api/search-external", async (req, res) => {
     }
 
     // Fast-filtering logic matching query against com-code column exactly
-    const filtered = cachedData.filter((item: any) => {
+    let filtered = cachedData.filter((item: any) => {
       if (!item) return false;
       const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
       return comCode === cleanQuery;
     });
 
-    res.json({ results: filtered });
+    // If not found in current cached memory (cache miss), fetch fresh data from Google Sheets immediately to catch newly added rows!
+    if (filtered.length === 0) {
+      console.log(`Cache miss for query '${cleanQuery}'. Fetching fresh data from Google Sheets to sync newly added rows...`);
+      await initializeCache();
+      filtered = cachedData.filter((item: any) => {
+        if (!item) return false;
+        const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
+        return comCode === cleanQuery;
+      });
+    }
+
+    res.json({ results: filtered, updatedAllRecords: filtered.length > 0 ? cachedData : undefined });
   } catch (error: any) {
     console.error("Search API execution failed:", error);
     res.json({ results: [] });

@@ -20,24 +20,9 @@ async function fetchSnapshot() {
 
       response = await fetch(TARGET_URL, {
         method: "GET",
-        redirect: "manual",
+        redirect: "follow",
         signal: controller.signal
       });
-
-      // Handle redirect manually to bypass Node.js fetch redirect-following bugs
-      if (response.status === 302 || response.status === 301 || response.status === 307 || response.status === 308) {
-        const redirectUrl = response.headers.get("location");
-        if (redirectUrl) {
-          console.log(`Following redirect to: ${redirectUrl.slice(0, 80)}...`);
-          clearTimeout(timeoutId);
-          timeoutId = setTimeout(() => controller.abort(), 120000);
-
-          response = await fetch(redirectUrl, {
-            method: "GET",
-            signal: controller.signal
-          });
-        }
-      }
 
       clearTimeout(timeoutId);
       timeoutId = null;

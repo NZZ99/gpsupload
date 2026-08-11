@@ -1,70 +1,97 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#000000">
-<link rel="apple-touch-icon" href="/icon-192.png">
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="manifest" href="/manifest.json?v=9" />
+    <link rel="manifest" href="/manifest.json?v=10" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Lat-Long Send" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192-v9.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512-v9.png" />
-    <link rel="shortcut icon" href="/icon-192-v9.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon-v9.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-v9.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v9.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon-v9.png" />
-    <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed-v9.png" />
-    <title>Lat-Long Send</title>
+    <meta name="apple-mobile-web-app-title" content="Lat-Long Sand" />
+    <link
+      rel="icon"
+      type="image/webp"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="shortcut icon"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="apple-touch-icon"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="152x152"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="167x167"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <link
+      rel="apple-touch-icon-precomposed"
+      href="https://i.postimg.cc/fTWGrNc0/icon-512-png.webp"
+    />
+    <title>Lat-Long Sand</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Force unregister legacy service workers and clear caches once to guarantee update on all devices
-      const PWA_VERSION = "v9";
+      const PWA_VERSION = "v10";
       if (localStorage.getItem("pwa_version_control") !== PWA_VERSION) {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then((registrations) => {
-            for (let reg of registrations) {
-              reg.unregister();
-            }
-            if ('caches' in window) {
-              caches.keys().then((keys) => {
-                return Promise.all(keys.map(key => caches.delete(key)));
-              }).then(() => {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker
+            .getRegistrations()
+            .then((registrations) => {
+              for (let reg of registrations) {
+                reg.unregister();
+              }
+              if ("caches" in window) {
+                caches
+                  .keys()
+                  .then((keys) => {
+                    return Promise.all(keys.map((key) => caches.delete(key)));
+                  })
+                  .then(() => {
+                    localStorage.setItem("pwa_version_control", PWA_VERSION);
+                    window.location.reload();
+                  });
+              } else {
                 localStorage.setItem("pwa_version_control", PWA_VERSION);
                 window.location.reload();
-              });
-            } else {
+              }
+            })
+            .catch(() => {
               localStorage.setItem("pwa_version_control", PWA_VERSION);
-              window.location.reload();
-            }
-          }).catch(() => {
-            localStorage.setItem("pwa_version_control", PWA_VERSION);
-          });
+            });
         } else {
           localStorage.setItem("pwa_version_control", PWA_VERSION);
         }
       }
 
       // Standard Service Worker Registration
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=9')
-            .then(reg => {
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/sw.js?v=10")
+            .then((reg) => {
               // Always check for updates on service worker on load
               reg.update().catch(() => {});
             })
-            .catch(error => {
-              console.log('ServiceWorker registration failed: ', error);
+            .catch((error) => {
+              console.log("ServiceWorker registration failed: ", error);
             });
         });
       }
     </script>
   </body>
 </html>
-
