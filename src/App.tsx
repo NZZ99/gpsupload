@@ -699,7 +699,7 @@ export default function App() {
 
         {/* Second Announcement Line - Text only, no background */}
         <div className="mt-2 text-center text-xs sm:text-sm font-medium text-zinc-700 tracking-wide">
-          Transformer Latt-Long များထောက်ပြီးပို့ပေးပါရန်။
+          Transformer တည်နေရာ Latt-Long များထောက်ပြီးပို့ပေးပါရန်။
         </div>
       </div>
 
