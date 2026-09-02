@@ -56,15 +56,16 @@ export default function App() {
   };
 
   // Helper function to directly fetch fresh records live from Google Apps Script with cache-busting
-  const fetchDirectFromGoogleSheet = async (): Promise<ExternalRecord[]> => {
+  const fetchDirectFromGoogleSheet = async (searchQuery?: string): Promise<ExternalRecord[]> => {
     let directTimeoutId: any = null;
     try {
       console.log("Attempting direct cross-origin fetch from Google Apps Script web app with cache buster...");
       const controller = new AbortController();
-      directTimeoutId = setTimeout(() => controller.abort(), 20000); // 20 seconds timeout
+      directTimeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds timeout to ensure massive JSON downloads complete on slow networks
 
       // Appending timestamp to URL bypasses Google CDN / browser cache for newly added rows
-      const freshUrl = `https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec?t=${Date.now()}`;
+      // We also append the search query in case the Apps Script was written to support server-side filtering
+      const freshUrl = `https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec?t=${Date.now()}${searchQuery ? `&query=${encodeURIComponent(searchQuery)}&search=${encodeURIComponent(searchQuery)}&id=${encodeURIComponent(searchQuery)}` : ""}`;
       const response = await fetch(freshUrl, {
         method: "GET",
         cache: "no-store",
@@ -245,21 +246,22 @@ export default function App() {
       return;
     }
 
-    setIsSearching(true);
-    setHasSearched(true);
-    setError(null);
-    setSelectedRecord(null);
-    setUploadSuccess(false);
+    const cleanQueryLower = cleanQuery.toLowerCase();
 
-    // Only allow searches with exactly 6 characters/digits
-    if (cleanQuery.length !== 6) {
+    // Only allow searches with exactly 6 characters/digits (User requested strict 6-character limit)
+    if (cleanQueryLower.length !== 6) {
       setSearchResults([]);
       setSelectedRecord(null);
       setIsSearching(false);
       return;
     }
 
-    const cleanQueryLower = cleanQuery.toLowerCase();
+    setIsSearching(true);
+    setHasSearched(true);
+    setError(null);
+    setSelectedRecord(null);
+    setUploadSuccess(false);
+
     const hasRealData = localRecords.length > 10;
 
     // 1. If we have real client-side cached records loaded in memory, check them first for instant response
@@ -311,7 +313,7 @@ export default function App() {
     // 3. If server didn't find it or isn't available, perform live cross-origin fetch directly from Google Sheets Web App with cache buster!
     if (!foundViaServer && latestQueryRef.current === query) {
       console.log(`Query '${cleanQuery}' not found in local cache or server. Syncing live Google Sheets Web App...`);
-      const freshRecords = await fetchDirectFromGoogleSheet();
+      const freshRecords = await fetchDirectFromGoogleSheet(cleanQueryLower);
       if (latestQueryRef.current === query) {
         const results = freshRecords.filter((item) => {
           if (!item) return false;
@@ -983,44 +985,38 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Elongated Black Pill Dispatch Button */}
+                          {/* Action Buttons Section */}
                           <div className="w-full flex flex-col items-center gap-3 pt-3">
-                            <button
-                              type="button"
-                              onClick={handleGoToMap}
-                              className="relative flex items-center justify-between w-full max-w-sm h-14 bg-[#18191d] text-white rounded-full pl-6 pr-2.5 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
-                            >
-                              <span className="font-sans font-bold tracking-wide text-sm text-zinc-100 transition-all">
-                                တည်နေရာ စစ်ရန်...
-                              </span>
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 group-hover:bg-zinc-700">
-                                <Map className="w-4 h-4 text-white" strokeWidth={2.5} />
-                              </div>
-                            </button>
+                            <div className="w-full flex flex-row items-center justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={handleGoToMap}
+                                className="relative flex-1 flex items-center justify-center gap-2 w-full h-12 bg-[#18191d] text-white rounded-xl px-2 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
+                              >
+                                <Map className="w-4 h-4 text-white opacity-80" strokeWidth={2} />
+                                <span className="font-sans font-bold tracking-wide text-xs sm:text-sm text-zinc-100 transition-all whitespace-nowrap">
+                                  တည်နေရာ စစ်ရန်...
+                                </span>
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={handleUpload}
-                              disabled={isUploading}
-                              className="relative flex items-center justify-between w-full max-w-sm h-14 bg-[#18191d] text-white rounded-full pl-6 pr-2.5 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black"
-                            >
-                              {/* Status/Progress Label */}
-                              <span className="font-sans font-bold tracking-wide text-sm text-zinc-100 transition-all">
+                              <button
+                                type="button"
+                                onClick={handleUpload}
+                                disabled={isUploading}
+                                className="relative flex-1 flex items-center justify-center gap-2 w-full h-12 bg-[#18191d] text-white rounded-xl px-2 transition-all shadow-md select-none group focus:outline-none cursor-pointer active:scale-[0.98] hover:bg-black disabled:opacity-70 disabled:cursor-not-allowed"
+                              >
                                 {isUploading ? (
-                                  <span className="flex items-center gap-2">
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                    Uploading...
-                                  </span>
+                                  <RefreshCw className="w-4 h-4 text-white opacity-80 animate-spin" strokeWidth={2} />
+                                ) : uploadSuccess ? (
+                                  <Check className="w-4 h-4 text-emerald-400" strokeWidth={2.5} />
                                 ) : (
-                                  "Upload"
+                                  <ArrowUp className="w-4 h-4 text-white opacity-80" strokeWidth={2} />
                                 )}
-                              </span>
-
-                              {/* Internal circular icon badge */}
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-800 group-hover:bg-zinc-700">
-                                <ArrowUp className="w-4 h-4 text-white" strokeWidth={2.5} />
-                              </div>
-                            </button>
+                                <span className="font-sans font-bold tracking-wide text-xs sm:text-sm text-zinc-100 transition-all whitespace-nowrap">
+                                  {isUploading ? "Uploading..." : "Upload"}
+                                </span>
+                              </button>
+                            </div>
 
                             {/* feedback info */}
                             <AnimatePresence>
