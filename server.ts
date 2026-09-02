@@ -60,8 +60,10 @@ const defaultFallbackRecords = [
 let cacheFetchPromise: Promise<void> | null = null;
 
 // Fetch from the search source Google Sheet web app provided by user
-async function initializeCache(): Promise<void> {
-  if (cacheFetchPromise) {
+async function initializeCache(forceFresh: boolean = false): Promise<void> {
+  if (forceFresh) {
+    cacheFetchPromise = null;
+  } else if (cacheFetchPromise) {
     return cacheFetchPromise;
   }
 
@@ -77,13 +79,15 @@ async function initializeCache(): Promise<void> {
       let timeoutId: any = null;
       try {
         console.log(`Fetch attempt ${attempt} of ${maxAttempts}...`);
-        // 120-second timeout (2 minutes) to give ample time for the massive 5.2 MB JSON download or Google cold starts
         const controller = new AbortController();
         timeoutId = setTimeout(() => controller.abort(), 120000);
 
-        response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
+        // Appending timestamp to URL bypasses Google CDN / edge cache for newly added rows
+        const freshUrl = `https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec?t=${Date.now()}`;
+        response = await fetch(freshUrl, {
           method: "GET",
           redirect: "follow",
+          cache: "no-store",
           signal: controller.signal
         });
 
@@ -285,7 +289,7 @@ app.post("/api/search-external", async (req, res) => {
     // If not found in current cached memory (cache miss), fetch fresh data from Google Sheets immediately to catch newly added rows!
     if (filtered.length === 0) {
       console.log(`Cache miss for query '${cleanQuery}'. Fetching fresh data from Google Sheets to sync newly added rows...`);
-      await initializeCache();
+      await initializeCache(true);
       filtered = cachedData.filter((item: any) => {
         if (!item) return false;
         const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();

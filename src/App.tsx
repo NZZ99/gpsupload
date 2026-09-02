@@ -41,23 +41,113 @@ export default function App() {
     { "ID": "77889", "အမည်": "ဦးလှမင်း", "ရာထူး": "ယာဉ်မောင်း", "မြို့နယ်": "လှိုင်", "ဖုန်း": "0931223344" }
   ];
 
+  // Safely write to localStorage with quota check and try-catch
+  const safeSaveToLocalStorage = (key: string, value: string) => {
+    try {
+      // 5MB is roughly 5,000,000 characters. Let's limit cache to 3.5MB to be safe and avoid QuotaExceededError
+      if (value.length < 3.5 * 1024 * 1024) {
+        localStorage.setItem(key, value);
+      } else {
+        console.log(`Database size (${(value.length / 1024 / 1024).toFixed(2)}MB) is too large for LocalStorage. Skipping cache.`);
+      }
+    } catch (e) {
+      console.warn("Could not save database cache to LocalStorage:", e);
+    }
+  };
+
+  // Helper function to directly fetch fresh records live from Google Apps Script with cache-busting
+  const fetchDirectFromGoogleSheet = async (): Promise<ExternalRecord[]> => {
+    let directTimeoutId: any = null;
+    try {
+      console.log("Attempting direct cross-origin fetch from Google Apps Script web app with cache buster...");
+      const controller = new AbortController();
+      directTimeoutId = setTimeout(() => controller.abort(), 20000); // 20 seconds timeout
+
+      // Appending timestamp to URL bypasses Google CDN / browser cache for newly added rows
+      const freshUrl = `https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec?t=${Date.now()}`;
+      const response = await fetch(freshUrl, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal
+      });
+
+      if (directTimeoutId) {
+        clearTimeout(directTimeoutId);
+        directTimeoutId = null;
+      }
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim() && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
+          let parsedData: ExternalRecord[] = [];
+          try {
+            const jsonData = JSON.parse(text);
+            if (Array.isArray(jsonData)) {
+              if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+                const headers = jsonData[0].map((h: any) => String(h || "").trim());
+                parsedData = jsonData.slice(1).map((row: any, rIdx: number) => {
+                  const obj: any = {};
+                  headers.forEach((header, cIdx) => {
+                    const key = header || `Column_${cIdx + 1}`;
+                    obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
+                  });
+                  if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
+                  return obj;
+                });
+              } else {
+                parsedData = jsonData;
+              }
+            } else if (jsonData && typeof jsonData === "object") {
+              const list = jsonData.data || jsonData.rows || jsonData.records || jsonData.items;
+              if (Array.isArray(list)) {
+                if (list.length > 0 && Array.isArray(list[0])) {
+                  const headers = list[0].map((h: any) => String(h || "").trim());
+                  parsedData = list.slice(1).map((row: any, rIdx: number) => {
+                    const obj: any = {};
+                    headers.forEach((header, cIdx) => {
+                      const key = header || `Column_${cIdx + 1}`;
+                      obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
+                    });
+                    if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
+                    return obj;
+                  });
+                } else {
+                  parsedData = list;
+                }
+              } else {
+                parsedData = [jsonData];
+              }
+            }
+          } catch (e) {
+            const parsed = Papa.parse<ExternalRecord>(text, { header: true, skipEmptyLines: true });
+            if (parsed.data && parsed.data.length > 0) {
+              parsedData = parsed.data;
+            }
+          }
+
+          if (parsedData.length > 0) {
+            setLocalRecords(parsedData);
+            setIsDbLoading(false);
+            const serialized = Papa.unparse(parsedData);
+            safeSaveToLocalStorage("cached_csv_records", serialized);
+            console.log(`Loaded & cached ${parsedData.length} records freshly from Google Apps Script Web App.`);
+            return parsedData;
+          }
+        }
+      }
+    } catch (directErr) {
+      if (directTimeoutId) {
+        clearTimeout(directTimeoutId);
+        directTimeoutId = null;
+      }
+      console.error("Direct Google Apps Script fetch failed:", directErr);
+    }
+    return [];
+  };
+
   // Load from LocalStorage or CDN Snapshot instantly on mount and update with background CSV fetch
   useEffect(() => {
     let loadedFromCache = false;
-
-    // Safely write to localStorage with quota check and try-catch
-    const safeSaveToLocalStorage = (key: string, value: string) => {
-      try {
-        // 5MB is roughly 5,000,000 characters. Let's limit cache to 3.5MB to be safe and avoid QuotaExceededError
-        if (value.length < 3.5 * 1024 * 1024) {
-          localStorage.setItem(key, value);
-        } else {
-          console.log(`Database size (${(value.length / 1024 / 1024).toFixed(2)}MB) is too large for LocalStorage. Skipping cache.`);
-        }
-      } catch (e) {
-        console.warn("Could not save database cache to LocalStorage:", e);
-      }
-    };
 
     // 1. Try to load instantly from LocalStorage cache (takes ~10-20ms)
     const cachedCsv = localStorage.getItem("cached_csv_records");
@@ -123,91 +213,9 @@ export default function App() {
 
       // If server API fails (e.g. running on GitHub Pages as static site), fetch directly from the Google Apps Script Web App!
       if (!fetchSuccessful) {
-        let directTimeoutId: any = null;
-        try {
-          console.log("Attempting direct cross-origin fetch from Google Apps Script web app...");
-          const controller = new AbortController();
-          directTimeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
-
-          const response = await fetch("https://script.google.com/macros/s/AKfycbzb6iADzGScWMZoRLnu-NKmmxBDJryZXxw3gTfkvE0NXmp6GMteOwUO3qMOLeS0CJGq/exec", {
-            method: "GET",
-            signal: controller.signal
-          });
-
-          if (directTimeoutId) {
-            clearTimeout(directTimeoutId);
-            directTimeoutId = null;
-          }
-
-          if (response.ok) {
-            const text = await response.text();
-            
-            // Check if response is HTML warning or error
-            if (text && text.trim() && !text.includes("<!DOCTYPE html>") && !text.includes("<html")) {
-              let parsedData: ExternalRecord[] = [];
-              try {
-                const jsonData = JSON.parse(text);
-                
-                if (Array.isArray(jsonData)) {
-                  if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
-                    const headers = jsonData[0].map((h: any) => String(h || "").trim());
-                    parsedData = jsonData.slice(1).map((row: any, rIdx: number) => {
-                      const obj: any = {};
-                      headers.forEach((header, cIdx) => {
-                        const key = header || `Column_${cIdx + 1}`;
-                        obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
-                      });
-                      if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
-                      return obj;
-                    });
-                  } else {
-                    parsedData = jsonData;
-                  }
-                } else if (jsonData && typeof jsonData === "object") {
-                  const list = jsonData.data || jsonData.rows || jsonData.records || jsonData.items;
-                  if (Array.isArray(list)) {
-                    if (list.length > 0 && Array.isArray(list[0])) {
-                      const headers = list[0].map((h: any) => String(h || "").trim());
-                      parsedData = list.slice(1).map((row: any, rIdx: number) => {
-                        const obj: any = {};
-                        headers.forEach((header, cIdx) => {
-                          const key = header || `Column_${cIdx + 1}`;
-                          obj[key] = row[cIdx] !== undefined ? row[cIdx] : "";
-                        });
-                        if (!obj.ID && !obj.id) obj.ID = String(rIdx + 1);
-                        return obj;
-                      });
-                    } else {
-                      parsedData = list;
-                    }
-                  } else {
-                    parsedData = [jsonData];
-                  }
-                }
-              } catch (e) {
-                // If JSON parsing fails, attempt to parse as CSV
-                const parsed = Papa.parse<ExternalRecord>(text, { header: true, skipEmptyLines: true });
-                if (parsed.data && parsed.data.length > 0) {
-                  parsedData = parsed.data;
-                }
-              }
-
-              if (parsedData.length > 0) {
-                setLocalRecords(parsedData);
-                setIsDbLoading(false);
-                const serialized = Papa.unparse(parsedData);
-                safeSaveToLocalStorage("cached_csv_records", serialized);
-                console.log(`Loaded & cached ${parsedData.length} records directly from Google Apps Script Web App.`);
-                fetchSuccessful = true;
-              }
-            }
-          }
-        } catch (directErr) {
-          if (directTimeoutId) {
-            clearTimeout(directTimeoutId);
-            directTimeoutId = null;
-          }
-          console.error("Direct Google Apps Script fetch failed too:", directErr);
+        const directRecords = await fetchDirectFromGoogleSheet();
+        if (directRecords.length > 0) {
+          fetchSuccessful = true;
         }
       }
 
@@ -221,7 +229,7 @@ export default function App() {
   }, []);
 
   // Triggers the search query instantly in-memory
-  const performSearch = (query: string) => {
+  const performSearch = async (query: string) => {
     latestQueryRef.current = query;
     const cleanQuery = query.trim();
 
@@ -268,46 +276,58 @@ export default function App() {
         setIsSearching(false);
         return;
       }
-      console.log(`Query '${cleanQuery}' not found in client snapshot. Checking server & Google Sheets for newly added records...`);
+      console.log(`Query '${cleanQuery}' not found in client snapshot. Checking server & live Google Sheets for newly added records...`);
     }
 
-    // 2. Fallback search to Server API (will fetch live Google Sheets data on cache miss for newly added rows!)
-    fetch("/api/search-external", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: cleanQuery }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data) => {
+    // 2. Try Server API search first if available
+    let foundViaServer = false;
+    try {
+      const res = await fetch("/api/search-external", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: cleanQuery }),
+      });
+      if (res.ok) {
+        const data = await res.json();
         if (latestQueryRef.current === query) {
           const results = data.results || [];
-          setSearchResults(results);
           if (results.length > 0) {
+            foundViaServer = true;
+            setSearchResults(results);
             setSelectedRecord(results[0]);
-            // Update local memory with fresh dataset or append newly found record
             if (data.updatedAllRecords && Array.isArray(data.updatedAllRecords) && data.updatedAllRecords.length > 0) {
               setLocalRecords(data.updatedAllRecords);
-            } else {
-              setLocalRecords(prev => {
-                const exists = prev.some(r => String(r["com-code"] || r["com_code"] || r["ID"] || r["id"] || "").trim().toLowerCase() === cleanQueryLower);
-                return exists ? prev : [results[0], ...prev];
-              });
+              safeSaveToLocalStorage("cached_csv_records", Papa.unparse(data.updatedAllRecords));
             }
-          } else {
-            setSelectedRecord(null);
+            setIsSearching(false);
+            return;
           }
         }
-      })
-      .catch((err) => {
-        console.error("Server search failed, using fallback:", err);
-        const fallbackResults = defaultFallbackRecords.filter((item) => {
+      }
+    } catch (err) {
+      console.warn("Server search API not available:", err);
+    }
+
+    // 3. If server didn't find it or isn't available, perform live cross-origin fetch directly from Google Sheets Web App with cache buster!
+    if (!foundViaServer && latestQueryRef.current === query) {
+      console.log(`Query '${cleanQuery}' not found in local cache or server. Syncing live Google Sheets Web App...`);
+      const freshRecords = await fetchDirectFromGoogleSheet();
+      if (latestQueryRef.current === query) {
+        const results = freshRecords.filter((item) => {
+          if (!item) return false;
           const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
           return comCode === cleanQueryLower;
         });
-        if (latestQueryRef.current === query) {
+
+        if (results.length > 0) {
+          setSearchResults(results);
+          setSelectedRecord(results[0]);
+        } else {
+          // Fallback check in default records
+          const fallbackResults = defaultFallbackRecords.filter((item) => {
+            const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
+            return comCode === cleanQueryLower;
+          });
           setSearchResults(fallbackResults);
           if (fallbackResults.length > 0) {
             setSelectedRecord(fallbackResults[0]);
@@ -315,12 +335,9 @@ export default function App() {
             setSelectedRecord(null);
           }
         }
-      })
-      .finally(() => {
-        if (latestQueryRef.current === query) {
-          setIsSearching(false);
-        }
-      });
+        setIsSearching(false);
+      }
+    }
   };
 
   const handleSearchSubmit = (e?: React.FormEvent) => {
@@ -676,6 +693,11 @@ export default function App() {
               501439-7/08/29-နန်းရွှေအိမ် Latt-Long ပြန်ထည့်ပေးပါ။
             </div>
           </div>
+        </div>
+
+        {/* Second Announcement Line - Text only, no background */}
+        <div className="mt-2 text-center text-xs sm:text-sm font-medium text-zinc-700 tracking-wide">
+          Transformer Latt-Long များထောက်ပြီးပို့ပေးပါရန်။
         </div>
       </div>
 
