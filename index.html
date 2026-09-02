@@ -46,7 +46,7 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       // Force unregister legacy service workers and clear caches once to guarantee update on all devices
-      const PWA_VERSION = "v10";
+      const PWA_VERSION = "v11";
       if (localStorage.getItem("pwa_version_control") !== PWA_VERSION) {
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker
@@ -78,14 +78,27 @@
         }
       }
 
-      // Standard Service Worker Registration
+      // Auto-reload on service worker controller change (when new version activates)
+      let refreshing = false;
       if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
+
         window.addEventListener("load", () => {
           navigator.serviceWorker
-            .register("/sw.js?v=10")
+            .register("/sw.js?v=11")
             .then((reg) => {
-              // Always check for updates on service worker on load
+              // Always check for updates on load and on tab focus
               reg.update().catch(() => {});
+              document.addEventListener("visibilitychange", () => {
+                if (document.visibilityState === "visible") {
+                  reg.update().catch(() => {});
+                }
+              });
             })
             .catch((error) => {
               console.log("ServiceWorker registration failed: ", error);

@@ -665,8 +665,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f4f5f8] text-zinc-900 font-sans antialiased flex flex-col justify-between">
       
-      {/* Blank elegant top margin instead of header titles */}
-      <div className="h-16" />
+      {/* Top Announcement Marquee Ticker */}
+      <div className="w-full max-w-xl mx-auto px-5 pt-4">
+        <div className="bg-[#18191d] text-white rounded-2xl px-4 py-3 flex items-center gap-3 overflow-hidden shadow-md border border-zinc-800">
+          <div className="flex-shrink-0 bg-amber-500/20 text-amber-400 p-1.5 rounded-xl flex items-center justify-center">
+            <AlertCircle className="w-4 h-4" />
+          </div>
+          <div className="relative flex-1 overflow-hidden whitespace-nowrap">
+            <div className="animate-marquee-smooth text-xs sm:text-sm font-medium text-zinc-100 tracking-wide">
+              501439-7/08/29-နန်းရွှေအိမ် Latt-Long ပြန်ထည့်ပေးပါ။
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Container */}
       <main className="flex-1 max-w-xl w-full mx-auto px-5 py-6 flex flex-col justify-center">
