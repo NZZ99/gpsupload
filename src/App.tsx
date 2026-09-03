@@ -171,7 +171,7 @@ export default function App() {
       // Seed fallback records first to be safe
       setLocalRecords(defaultFallbackRecords);
 
-      fetch("/database_snapshot.json")
+      fetch(`./database_snapshot.json?t=${Date.now()}`)
         .then(res => {
           if (res.ok) return res.json();
           throw new Error();
@@ -700,6 +700,9 @@ export default function App() {
         {/* Second Announcement Line - Text only, no background */}
         <div className="mt-2 text-center text-xs sm:text-sm font-medium text-zinc-700 tracking-wide">
           Transformer တည်နေရာ Latt-Long များထောက်ပြီးပို့ပေးပါရန်။
+        </div>
+        <div className="mt-1 text-center text-xs sm:text-sm font-medium text-zinc-700 tracking-wide">
+          ထည့်သွင်းရန်ကျန်ရှိမီတာ (7629) လုံးကျန်ရှိပါသည်။
         </div>
       </div>
 
