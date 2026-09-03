@@ -216,6 +216,10 @@ export default function App() {
       if (!fetchSuccessful) {
         const directRecords = await fetchDirectFromGoogleSheet();
         if (directRecords.length > 0) {
+          setLocalRecords(directRecords);
+          setIsDbLoading(false);
+          safeSaveToLocalStorage("cached_csv_records", Papa.unparse(directRecords));
+          console.log(`Loaded & cached ${directRecords.length} records freshly from Google Sheets directly.`);
           fetchSuccessful = true;
         }
       }
@@ -315,6 +319,13 @@ export default function App() {
       console.log(`Query '${cleanQuery}' not found in local cache or server. Syncing live Google Sheets Web App...`);
       const freshRecords = await fetchDirectFromGoogleSheet(cleanQueryLower);
       if (latestQueryRef.current === query) {
+        // If it returned a large dataset, it's the full database, so update our Client-Side In-Memory Cache!
+        if (freshRecords.length > 10) {
+          setLocalRecords(freshRecords);
+          safeSaveToLocalStorage("cached_csv_records", Papa.unparse(freshRecords));
+          console.log(`Updated Client-Side In-Memory Cache with ${freshRecords.length} records from live sync.`);
+        }
+
         const results = freshRecords.filter((item) => {
           if (!item) return false;
           const comCode = String(item["com-code"] || item["com_code"] || item["ID"] || item["id"] || "").trim().toLowerCase();
