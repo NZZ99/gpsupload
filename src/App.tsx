@@ -713,7 +713,7 @@ export default function App() {
           Transformer တည်နေရာ Latt-Long များထောက်ပြီးပို့ပေးပါရန်။
         </div>
         <div className="mt-1 text-center text-xs sm:text-sm font-medium text-zinc-700 tracking-wide">
-          ထည့်သွင်းရန်ကျန်ရှိမီတာ (7629) လုံးကျန်ရှိပါသည်။
+          ထည့်သွင်းရန်ကျန်ရှိမီတာ (7444) လုံးကျန်ရှိပါသည်။
         </div>
       </div>
 
